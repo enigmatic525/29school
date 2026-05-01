@@ -1,10 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/session'
 import { fetchProfile } from '@/lib/canvas'
+import { asTrimmedString, getClientIp, isSameOrigin, readJson } from '@/lib/security'
+import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
+
+// Generic auth error so token-shape mismatches do not give bots a faster signal.
+const AUTH_ERROR = NextResponse.json({ error: 'Invalid token' }, { status: 401 })
 
 export async function POST(request: NextRequest) {
-  const { token } = await request.json()
-  if (!token) return NextResponse.json({ error: 'Token required' }, { status: 400 })
+  if (!isSameOrigin(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Brute-force defense: 8 login attempts per IP per 15 minutes.
+  const ip = getClientIp(request)
+  const limit = rateLimit(`auth:${ip}`, 8, 15 * 60 * 1000)
+  if (!limit.allowed) return rateLimitResponse(limit)
+
+  const parsed = await readJson<{ token?: unknown }>(request, 4 * 1024)
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status })
+
+  const token = asTrimmedString(parsed.data.token, 200)
+  if (!token) return AUTH_ERROR
+  // Canvas tokens are opaque, but reasonable bound + charset narrows to
+  // the printable subset and rejects header-injection payloads.
+  if (!/^[A-Za-z0-9~._-]+$/.test(token)) return AUTH_ERROR
 
   try {
     const profile = await fetchProfile(token)
@@ -14,11 +34,14 @@ export async function POST(request: NextRequest) {
     await session.save()
     return NextResponse.json({ ok: true, name: profile.name })
   } catch {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
+    return AUTH_ERROR
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
+  if (!isSameOrigin(request)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   const session = await getSession()
   session.destroy()
   return NextResponse.json({ ok: true })

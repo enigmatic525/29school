@@ -6,11 +6,20 @@ export interface SessionData {
   isLoggedIn?: boolean
 }
 
+const password = process.env.SESSION_SECRET
+if (!password || password.length < 32) {
+  // Fail loud at boot if the secret is missing or too short to defeat brute-force.
+  throw new Error('SESSION_SECRET must be set to at least 32 characters')
+}
+
 const sessionOptions = {
-  password: process.env.SESSION_SECRET!,
+  password,
   cookieName: '29school',
   cookieOptions: {
+    httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
+    path: '/',
     maxAge: 60 * 60 * 24 * 30,
   },
 }

@@ -26,6 +26,16 @@ function fmt(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+// Defense-in-depth: never render a stored `javascript:`/`data:` URL as an href.
+function safeHref(raw: string): string {
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'http:' || u.protocol === 'https:' ? raw : '#'
+  } catch {
+    return '#'
+  }
+}
+
 export default function StudyGuides() {
   const [groups, setGroups] = useState<ClassGroup[]>([])
   const [classes, setClasses] = useState<DBClass[]>([])
@@ -45,10 +55,10 @@ export default function StudyGuides() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-400 uppercase tracking-wide">Shared by the class</p>
+        <p className="text-xs text-gray-400">Shared by the class</p>
         <button
           onClick={() => setModalOpen(true)}
-          className="rounded-none bg-gray-900 px-4 py-2 text-xs font-bold uppercase tracking-widest text-white hover:bg-gray-700 transition-colors"
+          className="rounded-none bg-gray-900 px-4 py-2 text-xs font-light text-white hover:bg-gray-700 transition-colors"
         >
           + Add Resource
         </button>
@@ -61,7 +71,7 @@ export default function StudyGuides() {
           <p className="text-sm text-gray-400">No resources yet.</p>
           <button
             onClick={() => setModalOpen(true)}
-            className="mt-3 text-xs text-gray-400 hover:text-gray-700 uppercase tracking-wide transition-colors"
+            className="mt-3 text-xs text-gray-400 hover:text-gray-700 transition-colors"
           >
             Be the first to add one →
           </button>
@@ -72,7 +82,7 @@ export default function StudyGuides() {
             <section key={group.id}>
               <div className="flex items-center gap-3 mb-3">
                 <div className="h-px flex-1 bg-gray-200" />
-                <h2 className="text-xs font-bold uppercase tracking-widest text-gray-500 shrink-0">
+                <h2 className="text-xs font-light text-gray-500 shrink-0">
                   {group.name}
                 </h2>
                 <div className="h-px flex-1 bg-gray-200" />
@@ -81,7 +91,7 @@ export default function StudyGuides() {
                 {group.guides.map((guide) => (
                   <li key={guide.id}>
                     <a
-                      href={guide.url}
+                      href={safeHref(guide.url)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center gap-3 border border-gray-200 bg-white px-4 py-3 hover:bg-gray-50 transition-colors group"
@@ -102,7 +112,7 @@ export default function StudyGuides() {
                       <span className="flex-1 text-sm text-gray-800 group-hover:text-black truncate">
                         {guide.title}
                       </span>
-                      <span className="shrink-0 text-[11px] text-gray-400 uppercase tracking-wide">
+                      <span className="shrink-0 text-[11px] text-gray-400">
                         {fmt(guide.created_at)}
                       </span>
                     </a>
@@ -204,7 +214,7 @@ function AddModal({
       <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
         <div className="w-full max-w-md border border-gray-200 bg-white p-6 shadow-xl">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-gray-900">Add Resource</h2>
+            <h2 className="text-xs font-light text-gray-900">Add Resource</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -214,7 +224,7 @@ function AddModal({
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Class</label>
+              <label className="text-xs font-light text-gray-500">Class</label>
               <select
                 value={classId}
                 onChange={(e) => setClassId(e.target.value === 'new' ? 'new' : Number(e.target.value))}
@@ -237,7 +247,7 @@ function AddModal({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Title</label>
+              <label className="text-xs font-light text-gray-500">Title</label>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -253,7 +263,7 @@ function AddModal({
                   key={t}
                   type="button"
                   onClick={() => { setType(t); setUrl(''); setFile(null) }}
-                  className={`flex-1 py-2 text-xs font-bold uppercase tracking-widest transition-colors ${
+                  className={`flex-1 py-2 text-xs font-light transition-colors ${
                     type === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                   }`}
                 >
@@ -286,7 +296,7 @@ function AddModal({
                 {file ? (
                   <p className="text-sm text-gray-700">{file.name}</p>
                 ) : (
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Click to select a PDF</p>
+                  <p className="text-xs text-gray-400">Click to select a PDF</p>
                 )}
               </div>
             )}
@@ -296,7 +306,7 @@ function AddModal({
             <button
               type="submit"
               disabled={submitting || !title.trim()}
-              className="rounded-none bg-gray-900 py-2.5 text-xs font-bold uppercase tracking-widest text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-none bg-gray-900 py-2.5 text-xs font-light text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? 'Uploading…' : 'Add Resource'}
             </button>

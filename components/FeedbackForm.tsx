@@ -35,12 +35,12 @@ export default function FeedbackForm() {
 
   if (state === 'success') {
     return (
-      <div className="border border-gray-200 bg-gray-50 p-8 text-center max-w-lg">
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-900 mb-1">Submitted</p>
+      <div className="border border-gray-200 bg-gray-50 p-8 text-center">
+        <p className="text-xs font-light text-gray-900 mb-1">Submitted</p>
         <p className="text-sm text-gray-500">Your response was sent anonymously.</p>
         <button
           onClick={() => { setState('idle'); setMessage('') }}
-          className="mt-5 text-xs uppercase tracking-wide text-gray-400 hover:text-gray-700 transition-colors"
+          className="mt-5 text-xs text-gray-400 hover:text-gray-700 transition-colors"
         >
           Submit another →
         </button>
@@ -49,13 +49,13 @@ export default function FeedbackForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5 max-w-lg">
-      <p className="text-xs text-gray-400 uppercase tracking-wide">
-        Anonymous — no names, no tracking.
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+      <p className="text-xs text-gray-400">
+        This form will be anonymously sent to me (Adam). I will do my best to take action on the comment or question.
       </p>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Category</label>
+        <label className="text-xs font-light text-gray-500">Category</label>
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -66,7 +66,7 @@ export default function FeedbackForm() {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Message</label>
+        <label className="text-xs font-light text-gray-500">Message</label>
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -84,7 +84,7 @@ export default function FeedbackForm() {
       <button
         type="submit"
         disabled={state === 'loading' || !message.trim()}
-        className="rounded-none bg-gray-900 py-2.5 text-xs font-bold uppercase tracking-widest text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="rounded-none bg-gray-900 py-2.5 text-xs font-light text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {state === 'loading' ? 'Sending…' : 'Submit Anonymously'}
       </button>
