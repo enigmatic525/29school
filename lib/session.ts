@@ -4,6 +4,10 @@ import { cookies } from 'next/headers'
 export interface SessionData {
   canvasToken?: string
   isLoggedIn?: boolean
+  // True when the user opted into "use without token" mode. They have a
+  // session but no Canvas access — they can use feedback, study guides,
+  // and the notice board, but the workload dashboard is unavailable.
+  guest?: boolean
 }
 
 const password = process.env.SESSION_SECRET

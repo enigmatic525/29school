@@ -7,7 +7,7 @@ import {
   isSafeHttpUrl,
   isSameOrigin,
   readJson,
-  requireAuth,
+  requireSession,
 } from '@/lib/security'
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
@@ -16,7 +16,7 @@ const MAX_URL = 2048
 const ALLOWED_TYPES = new Set(['pdf', 'link'])
 
 export async function GET() {
-  const auth = await requireAuth()
+  const auth = await requireSession()
   if (!auth.ok) return auth.res
 
   const result = await loadStudyGuides()
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const auth = await requireAuth()
+  const auth = await requireSession()
   if (!auth.ok) return auth.res
 
   const ip = getClientIp(request)

@@ -5,7 +5,7 @@ import { getSession } from '@/lib/session'
 
 export default async function StudyGuidesPage() {
   const session = await getSession()
-  if (!session.isLoggedIn || !session.canvasToken) redirect('/login')
+  if (!session.isLoggedIn) redirect('/login')
 
   const result = await loadStudyGuides()
   const initialGroups = 'error' in result ? [] : result.groups

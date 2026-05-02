@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { getClientIp, isSameOrigin, requireAuth } from '@/lib/security'
+import { getClientIp, isSameOrigin, requireSession } from '@/lib/security'
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const auth = await requireAuth()
+  const auth = await requireSession()
   if (!auth.ok) return auth.res
 
   const ip = getClientIp(request)

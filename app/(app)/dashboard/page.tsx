@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
 import { fetchAllAssignments, getAssignmentScore, type CanvasAssignment } from '@/lib/canvas'
@@ -66,9 +67,35 @@ function relativeWhen(due: Date): string {
 export default async function DashboardPage() {
   const session = await getSession()
   // Defense-in-depth: the layout redirects unauthenticated requests, but in
-  // Next 16 the page renders in parallel with the layout. Skip the Canvas
-  // fetch if there's no token to avoid spurious 401s in the logs.
-  if (!session.isLoggedIn || !session.canvasToken) redirect('/login')
+  // Next 16 the page renders in parallel with the layout. Re-check here.
+  if (!session.isLoggedIn) redirect('/login')
+
+  // Guest mode: no Canvas token, show CTA instead of trying to fetch.
+  if (!session.canvasToken) {
+    return (
+      <>
+        <h1 className="mb-1 text-xl font-light">My Workload</h1>
+        <p className="mb-8 text-xs text-gray-400">
+          You&apos;re using 29.school without a Canvas token.
+        </p>
+        <div className="border border-gray-200 bg-gray-50 p-8">
+          <p className="text-sm font-medium text-gray-900 mb-2">
+            Connect Canvas to see your workload
+          </p>
+          <p className="text-sm text-gray-500 leading-relaxed mb-5">
+            The workload calendar pulls due dates from your Canvas account. Connect now to enable
+            it — or keep using feedback, study guides, and the notice board.
+          </p>
+          <Link
+            href="/login?from=settings"
+            className="inline-block rounded-none bg-gray-900 px-5 py-2.5 text-xs font-light text-white hover:bg-gray-700 transition-colors"
+          >
+            Connect Canvas
+          </Link>
+        </div>
+      </>
+    )
+  }
 
   const { assignments } = await fetchAllAssignments(session.canvasToken)
   const { dueToday, weekScore, nextDue, total } = summarize(assignments)

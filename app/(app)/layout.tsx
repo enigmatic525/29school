@@ -5,18 +5,22 @@ import AppNav from '@/components/AppNav'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession()
-  if (!session.isLoggedIn || !session.canvasToken) redirect('/login')
+  if (!session.isLoggedIn) redirect('/login')
 
-  let profile: { name: string; primary_email: string }
-  try {
-    profile = await fetchProfile(session.canvasToken)
-  } catch {
-    redirect('/login')
+  let displayName = 'Guest'
+  const isGuest = !session.canvasToken
+  if (session.canvasToken) {
+    try {
+      const profile = await fetchProfile(session.canvasToken)
+      displayName = profile.name
+    } catch {
+      redirect('/login')
+    }
   }
 
   return (
     <div className="min-h-screen bg-white text-gray-900 flex flex-col">
-      <AppNav name={profile.name} />
+      <AppNav name={displayName} isGuest={isGuest} />
       <main id="main-content" className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 py-8">
         {children}
       </main>

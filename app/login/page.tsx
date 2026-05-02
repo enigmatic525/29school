@@ -8,6 +8,8 @@ function LoginContent() {
   const [token, setToken] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [confirmGuestOpen, setConfirmGuestOpen] = useState(false)
+  const [guestLoading, setGuestLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const fromSettings = searchParams.get('from') === 'settings'
@@ -39,6 +41,29 @@ function LoginContent() {
       setError('Something went wrong. Check your connection.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function continueAsGuest() {
+    setError('')
+    setGuestLoading(true)
+    try {
+      const res = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest: true }),
+      })
+      if (!res.ok) {
+        setError('Could not continue without a token. Try again.')
+        setGuestLoading(false)
+        return
+      }
+      setConfirmGuestOpen(false)
+      router.push('/dashboard')
+      router.refresh()
+    } catch {
+      setError('Network error. Try again.')
+      setGuestLoading(false)
     }
   }
 
@@ -114,6 +139,16 @@ function LoginContent() {
           </button>
         </form>
 
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => setConfirmGuestOpen(true)}
+            className="text-xs text-gray-400 hover:text-gray-700 transition-colors underline-offset-4 hover:underline"
+          >
+            Use without token?
+          </button>
+        </div>
+
         <details className="mt-8">
           <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors">
             How do I get my access token?
@@ -134,12 +169,73 @@ function LoginContent() {
             </li>
             <li>Copy the token and paste it above</li>
           </ol>
-          <p className="mt-3 text-[11px] text-gray-400 leading-relaxed border-l-2 border-gray-200 pl-4">
-            Your token is stored encrypted in a session cookie and is only used to read your
-            assignment list from Canvas. You can revoke it anytime from Canvas settings.
-          </p>
+        </details>
+
+        <details className="mt-3">
+          <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            Is this secure?
+          </summary>
+          <div className="mt-3 flex flex-col gap-2 text-xs text-gray-500 leading-relaxed border-l-2 border-gray-200 pl-4">
+            <p>
+              Your token is stored only in your browser, in an httpOnly encrypted cookie.
+              JavaScript on the page can&apos;t read it, so XSS can&apos;t exfiltrate it directly.
+            </p>
+            <p>
+              It&apos;s never written to a database, log file, or email. The server holds it only
+              in memory for the duration of a request, to call Canvas.
+            </p>
+            <p>
+              The cookie is encrypted with{' '}
+              <code className="px-1 bg-gray-100 rounded text-[11px]">SESSION_SECRET</code>, so even
+              if someone intercepts your raw cookie they can&apos;t decrypt it without that secret.
+            </p>
+          </div>
         </details>
       </div>
+
+      {confirmGuestOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm"
+            onClick={() => !guestLoading && setConfirmGuestOpen(false)}
+            aria-hidden="true"
+          />
+          <div
+            className="fixed inset-0 z-40 flex items-center justify-center p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="guest-confirm-title"
+          >
+            <div className="w-full max-w-sm border border-gray-200 bg-white p-6 shadow-xl">
+              <h2 id="guest-confirm-title" className="text-sm font-medium text-gray-900 mb-2">
+                Are you sure?
+              </h2>
+              <p className="text-sm text-gray-500 leading-relaxed mb-5">
+                You won&apos;t be able to set up your workload dashboard, but other features will
+                be available.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmGuestOpen(false)}
+                  disabled={guestLoading}
+                  className="rounded-none border border-gray-300 px-4 py-2 text-xs font-light text-gray-700 hover:border-gray-500 transition-colors disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={continueAsGuest}
+                  disabled={guestLoading}
+                  className="rounded-none bg-gray-900 px-4 py-2 text-xs font-light text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {guestLoading ? 'Continuing…' : 'Continue'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

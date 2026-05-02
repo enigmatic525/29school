@@ -11,7 +11,7 @@ const TABS = [
   { label: 'Notice Board', href: '/notice-board' },
 ]
 
-export default function AppNav({ name }: { name: string }) {
+export default function AppNav({ name, isGuest = false }: { name: string; isGuest?: boolean }) {
   const pathname = usePathname()
   const router = useRouter()
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -104,7 +104,7 @@ export default function AppNav({ name }: { name: string }) {
                 className="absolute right-0 top-10 z-20 w-52 rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
               >
                 <div className="px-3 py-2 text-xs text-gray-400 border-b border-gray-100 mb-1 truncate">
-                  {name}
+                  {isGuest ? 'Guest mode' : name}
                 </div>
                 <Link
                   role="menuitem"
@@ -112,7 +112,7 @@ export default function AppNav({ name }: { name: string }) {
                   className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                   onClick={() => setSettingsOpen(false)}
                 >
-                  Update Canvas token
+                  {isGuest ? 'Connect Canvas' : 'Update Canvas token'}
                 </Link>
                 <button
                   type="button"

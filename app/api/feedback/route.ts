@@ -6,7 +6,7 @@ import {
   getClientIp,
   isSameOrigin,
   readJson,
-  requireAuth,
+  requireSession,
   sanitizeHeader,
 } from '@/lib/security'
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const auth = await requireAuth()
+  const auth = await requireSession()
   if (!auth.ok) return auth.res
 
   // 5 messages / 10 min per IP, plus a global 200 / 10 min cap so a botnet
