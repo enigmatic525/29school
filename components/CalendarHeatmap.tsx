@@ -259,7 +259,9 @@ export default function CalendarHeatmap({ assignments }: Props) {
                 {barH > 0 && (
                   <rect
                     x={bx} y={by} width={BAR_W} height={barH}
-                    fill={isHovered ? '#374151' : '#111111'}
+                    rx={4} ry={4}
+                    fill={isHovered ? '#374151' : i === 0 ? '#6b7280' : '#9ca3af'}
+                    style={{ transition: 'fill 120ms ease' }}
                   />
                 )}
                 <line x1={cx} y1={B} x2={cx} y2={B + 6} stroke="#d1d5db" strokeWidth={0.75} />
