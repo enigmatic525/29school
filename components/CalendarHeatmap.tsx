@@ -55,7 +55,7 @@ function yTicks(maxVal: number): number[] {
   return [0, step, top]
 }
 
-const TOTAL_WEEKS = 16
+const TOTAL_WEEKS = 8
 const CHART_DAYS = 7
 
 // SVG coordinate system
@@ -173,7 +173,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* 16-week heatmap grid */}
+      {/* 8-week heatmap grid */}
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
         {weeks.map((week, i) => {
           const isRed = week.score >= 30
