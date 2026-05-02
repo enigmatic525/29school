@@ -117,6 +117,25 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
                 <button
                   type="button"
                   role="menuitem"
+                  onClick={() => {
+                    setSettingsOpen(false)
+                    router.refresh()
+                  }}
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Refresh data
+                </button>
+                <Link
+                  role="menuitem"
+                  href="/feedback"
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  onClick={() => setSettingsOpen(false)}
+                >
+                  Send feedback
+                </Link>
+                <button
+                  type="button"
+                  role="menuitem"
                   onClick={signOut}
                   className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-gray-50 transition-colors"
                 >

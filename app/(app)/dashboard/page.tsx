@@ -119,9 +119,7 @@ export default async function DashboardPage() {
   return (
     <>
       <h1 className="mb-1 text-xl font-light">My Workload</h1>
-      <p className="mb-8 text-xs text-gray-400">
-        Pulled live from Canvas · {total} upcoming assignment{total === 1 ? '' : 's'}
-      </p>
+      <p className="mb-8 text-xs text-gray-400">Pulled live from Canvas</p>
 
       <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SummaryCard label="Due today" value={String(dueToday)} accent={dueToday > 0} />

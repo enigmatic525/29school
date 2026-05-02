@@ -24,9 +24,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <main id="main-content" className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 py-8">
         {children}
       </main>
-      <footer className="mx-auto w-full max-w-5xl px-4 sm:px-6 py-6 text-[11px] text-gray-400 border-t border-gray-100">
-        29.school · Built by the Class of 2029
-      </footer>
     </div>
   )
 }

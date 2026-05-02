@@ -27,6 +27,8 @@ interface Props {
   initialClasses: DBClass[]
   initialError: string | null
   schemaMissing?: boolean
+  supabaseHost?: string
+  sqlEditorUrl?: string
 }
 
 function fmt(iso: string) {
@@ -48,6 +50,8 @@ export default function StudyGuides({
   initialClasses,
   initialError,
   schemaMissing,
+  supabaseHost,
+  sqlEditorUrl,
 }: Props) {
   const [groups, setGroups] = useState<ClassGroup[]>(initialGroups)
   const [classes, setClasses] = useState<DBClass[]>(initialClasses)
@@ -70,10 +74,29 @@ export default function StudyGuides({
       <div className="border border-amber-200 bg-amber-50 p-6">
         <p className="text-xs font-medium text-amber-800 mb-1">Study guides database isn&apos;t set up yet</p>
         <p className="text-xs text-amber-700 leading-relaxed">
-          The Supabase project at{' '}
-          <code className="px-1 bg-amber-100 rounded text-[11px]">SUPABASE_URL</code> doesn&apos;t
-          have the required tables. To enable this tab, open your Supabase dashboard, go to{' '}
-          <strong>SQL Editor</strong>, paste the contents of{' '}
+          {supabaseHost ? (
+            <>
+              The Supabase project at{' '}
+              <code className="px-1 bg-amber-100 rounded text-[11px]">{supabaseHost}</code> doesn&apos;t
+              have the required tables.
+            </>
+          ) : (
+            <>The Supabase project doesn&apos;t have the required tables.</>
+          )}{' '}
+          To enable this tab,{' '}
+          {sqlEditorUrl ? (
+            <a
+              href={sqlEditorUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium text-amber-900 hover:text-amber-800"
+            >
+              open the SQL Editor
+            </a>
+          ) : (
+            <>open your Supabase dashboard and go to <strong>SQL Editor</strong></>
+          )}
+          , paste the contents of{' '}
           <code className="px-1 bg-amber-100 rounded text-[11px]">supabase/schema.sql</code> from
           this repo, and click <strong>Run</strong>. Reload this page when finished.
         </p>
