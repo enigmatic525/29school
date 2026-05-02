@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 
 // Apply security headers to every response. Kept narrow on purpose: this runs
 // edge-fast and never touches the body, so it is safe to enable site-wide.
@@ -14,7 +14,9 @@ const SECURITY_HEADERS: Record<string, string> = {
   'X-Permitted-Cross-Domain-Policies': 'none',
 }
 
-export function proxy() {
+const PRIVATE_PATH_PREFIXES = ['/dashboard', '/feedback', '/study-guides', '/notice-board', '/api']
+
+export function proxy(request: NextRequest) {
   const response = NextResponse.next()
 
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
@@ -26,6 +28,13 @@ export function proxy() {
       'Strict-Transport-Security',
       'max-age=63072000; includeSubDomains; preload'
     )
+  }
+
+  // Authenticated/data-bearing pages: never cache. Prevents back-button leaks
+  // after sign-out and stops shared caches from holding personal data.
+  const path = request.nextUrl.pathname
+  if (PRIVATE_PATH_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))) {
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0')
   }
 
   // Per-nonce CSP would be ideal, but Next.js inlines hydration scripts.

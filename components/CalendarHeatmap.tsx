@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useState, useMemo, useRef } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas'
 import { getAssignmentType, getAssignmentScore } from '@/lib/canvas'
 
@@ -70,16 +70,29 @@ const PH = B - T  // plot height = 444
 const SLOT = PW / CHART_DAYS   // ~135.4 per day
 const BAR_W = SLOT * 0.52      // ~70.4
 
+function selectWeek(prev: number | null, next: number | null): number | null {
+  return prev === next ? null : next
+}
+
 export default function CalendarHeatmap({ assignments }: Props) {
   const [selectedWeekIdx, setSelectedWeekIdx] = useState<number | null>(null)
   const [requestedWeeks, setRequestedWeeks] = useState<Set<number>>(new Set())
   const [rescheduleLoading, setRescheduleLoading] = useState(false)
-  const [tooltip, setTooltip] = useState<{ dayIdx: number; x: number; y: number } | null>(null)
+  const [tooltip, setTooltip] = useState<{
+    dayIdx: number
+    x: number
+    y: number
+    containerWidth: number
+  } | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    setRescheduleLoading(false)
-  }, [selectedWeekIdx])
+  function chooseWeek(i: number) {
+    setSelectedWeekIdx((prev) => {
+      const next = selectWeek(prev, i)
+      if (next !== prev) setRescheduleLoading(false)
+      return next
+    })
+  }
 
   const weeks = useMemo((): Week[] => {
     const today = new Date()
@@ -88,6 +101,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
     let cur = new Date(start)
     for (let i = 0; i < TOTAL_WEEKS; i++) {
       const weekEnd = addDays(cur, 6)
+      weekEnd.setHours(23, 59, 59, 999)
       const weekAssignments = assignments.filter((a) => {
         const due = new Date(a.due_at!)
         return due >= cur && due <= weekEnd
@@ -167,7 +181,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
           return (
             <button
               key={i}
-              onClick={() => setSelectedWeekIdx(isSelected ? null : i)}
+              onClick={() => chooseWeek(i)}
               className={`flex flex-col gap-1 border p-2 text-left transition-all ${
                 isRed
                   ? 'bg-red-50 border-red-300 text-red-700'
@@ -230,7 +244,12 @@ export default function CalendarHeatmap({ assignments }: Props) {
                 onMouseMove={(e) => {
                   const rect = chartRef.current?.getBoundingClientRect()
                   if (!rect) return
-                  setTooltip({ dayIdx: i, x: e.clientX - rect.left, y: e.clientY - rect.top })
+                  setTooltip({
+                    dayIdx: i,
+                    x: e.clientX - rect.left,
+                    y: e.clientY - rect.top,
+                    containerWidth: rect.width,
+                  })
                 }}
                 onMouseLeave={() => setTooltip(null)}
                 style={{ cursor: 'default' }}
@@ -262,9 +281,10 @@ export default function CalendarHeatmap({ assignments }: Props) {
         {tooltip !== null && (() => {
           const day = dailyData[tooltip.dayIdx]
           const TOOLTIP_W = 224
-          const leftPos = tooltip.dayIdx < 4
+          const rawLeft = tooltip.dayIdx < 4
             ? tooltip.x + 14
             : tooltip.x - 14 - TOOLTIP_W
+          const leftPos = Math.max(4, Math.min(rawLeft, tooltip.containerWidth - TOOLTIP_W - 4))
           const topPos = Math.max(4, tooltip.y - 16)
           return (
             <div

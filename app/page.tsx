@@ -1,26 +1,34 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
+import { getSession } from '@/lib/session'
 
 const features = [
   {
     title: 'Assignment Load Calendar',
-    description: 'See every due date across all your courses on one heatmap. Spot the brutal weeks before they hit.',
+    description:
+      'See every due date across all your courses on one heatmap. Spot the brutal weeks before they hit.',
   },
   {
     title: 'Anonymous Feedback',
-    description: 'Submit concerns directly to your grade rep — no name, no judgment, just honest input.',
+    description:
+      'Submit concerns directly to your grade rep — no name, no judgment, just honest input.',
   },
   {
     title: 'Study Guide Library',
-    description: 'Share and find community-made study guides organized by course and semester.',
+    description:
+      'Share and find community-made study guides organized by course and semester.',
   },
 ]
 
-export default function HomePage() {
+export default async function HomePage() {
+  const session = await getSession()
+  if (session.isLoggedIn && session.canvasToken) redirect('/dashboard')
+
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-zinc-950 text-zinc-100 selection:bg-white selection:text-black">
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-5 max-w-4xl mx-auto">
-        <span className="text-xl font-black tracking-tight">29</span>
+        <span className="text-xl font-black tracking-tight" aria-label="29.school">29</span>
         <Link
           href="/login"
           className="rounded-lg border border-zinc-700 px-4 py-1.5 text-sm text-zinc-300 hover:border-zinc-500 hover:text-white transition-colors"
@@ -31,7 +39,7 @@ export default function HomePage() {
 
       {/* Hero */}
       <section className="flex flex-col items-center text-center px-6 pt-20 pb-24 max-w-2xl mx-auto">
-        <div className="mb-6">
+        <div className="mb-6 flex items-baseline">
           <span className="text-7xl font-black tracking-tight">29</span>
           <span className="ml-2 text-xl font-light text-zinc-400">.school</span>
         </div>
@@ -47,6 +55,9 @@ export default function HomePage() {
         >
           View Your Assignment Calendar
         </Link>
+        <p className="mt-3 text-xs text-zinc-500">
+          Eastside Prep students only · Canvas access token required
+        </p>
       </section>
 
       {/* Features */}

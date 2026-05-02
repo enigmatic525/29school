@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 
 interface Guide {
   id: number
@@ -22,6 +22,13 @@ interface DBClass {
   name: string
 }
 
+interface Props {
+  initialGroups: ClassGroup[]
+  initialClasses: DBClass[]
+  initialError: string | null
+  schemaMissing?: boolean
+}
+
 function fmt(iso: string) {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
@@ -36,26 +43,52 @@ function safeHref(raw: string): string {
   }
 }
 
-export default function StudyGuides() {
-  const [groups, setGroups] = useState<ClassGroup[]>([])
-  const [classes, setClasses] = useState<DBClass[]>([])
-  const [loading, setLoading] = useState(true)
+export default function StudyGuides({
+  initialGroups,
+  initialClasses,
+  initialError,
+  schemaMissing,
+}: Props) {
+  const [groups, setGroups] = useState<ClassGroup[]>(initialGroups)
+  const [classes, setClasses] = useState<DBClass[]>(initialClasses)
   const [modalOpen, setModalOpen] = useState(false)
 
-  async function load() {
-    const res = await fetch('/api/study-guides')
-    const data = await res.json()
-    setGroups(data.groups ?? [])
-    setClasses(data.classes ?? [])
-    setLoading(false)
+  async function refresh() {
+    try {
+      const res = await fetch('/api/study-guides', { cache: 'no-store' })
+      if (!res.ok) return
+      const data = await res.json()
+      setGroups(data.groups ?? [])
+      setClasses(data.classes ?? [])
+    } catch {
+      // Silent: caller already updated optimistically; next render still has stale-but-correct data.
+    }
   }
 
-  useEffect(() => { load() }, [])
+  if (schemaMissing) {
+    return (
+      <div className="border border-amber-200 bg-amber-50 p-6">
+        <p className="text-xs font-medium text-amber-800 mb-1">Study guides database isn&apos;t set up yet</p>
+        <p className="text-xs text-amber-700 leading-relaxed">
+          The Supabase project at{' '}
+          <code className="px-1 bg-amber-100 rounded text-[11px]">SUPABASE_URL</code> doesn&apos;t
+          have the required tables. To enable this tab, open your Supabase dashboard, go to{' '}
+          <strong>SQL Editor</strong>, paste the contents of{' '}
+          <code className="px-1 bg-amber-100 rounded text-[11px]">supabase/schema.sql</code> from
+          this repo, and click <strong>Run</strong>. Reload this page when finished.
+        </p>
+      </div>
+    )
+  }
+
+  const total = groups.reduce((n, g) => n + g.guides.length, 0)
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-400">Shared by the class</p>
+        <p className="text-xs text-gray-400">
+          {total} resource{total === 1 ? '' : 's'}
+        </p>
         <button
           onClick={() => setModalOpen(true)}
           className="rounded-none bg-gray-900 px-4 py-2 text-xs font-light text-white hover:bg-gray-700 transition-colors"
@@ -64,8 +97,10 @@ export default function StudyGuides() {
         </button>
       </div>
 
-      {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+      {initialError ? (
+        <div className="border border-red-200 bg-red-50 p-6 text-center">
+          <p className="text-sm text-red-600">{initialError}</p>
+        </div>
       ) : groups.length === 0 && classes.length === 0 ? (
         <div className="border border-dashed border-gray-300 p-10 text-center">
           <p className="text-sm text-gray-400">No resources yet.</p>
@@ -96,7 +131,7 @@ export default function StudyGuides() {
                       rel="noopener noreferrer"
                       className="flex items-center gap-3 border border-gray-200 bg-white px-4 py-3 hover:bg-gray-50 transition-colors group"
                     >
-                      <span className="text-gray-400 shrink-0">
+                      <span className="text-gray-400 shrink-0" aria-hidden="true">
                         {guide.type === 'pdf' ? (
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -128,10 +163,9 @@ export default function StudyGuides() {
         <AddModal
           classes={classes}
           onClose={() => setModalOpen(false)}
-          onAdded={(newGroups, newClasses) => {
-            setGroups(newGroups)
-            setClasses(newClasses)
+          onAdded={async () => {
             setModalOpen(false)
+            await refresh()
           }}
         />
       )}
@@ -146,7 +180,7 @@ function AddModal({
 }: {
   classes: DBClass[]
   onClose: () => void
-  onAdded: (groups: ClassGroup[], classes: DBClass[]) => void
+  onAdded: () => void
 }) {
   const [classId, setClassId] = useState<number | 'new'>(classes[0]?.id ?? 'new')
   const [newClassName, setNewClassName] = useState('')
@@ -174,7 +208,7 @@ function AddModal({
           body: JSON.stringify({ name: newClassName.trim() }),
         })
         const data = await res.json()
-        if (!res.ok) { setError(data.error); setSubmitting(false); return }
+        if (!res.ok) { setError(data.error || 'Could not save'); setSubmitting(false); return }
         resolvedClassId = data.class.id
       }
 
@@ -185,7 +219,7 @@ function AddModal({
         fd.append('file', file)
         const uploadRes = await fetch('/api/study-guides/upload', { method: 'POST', body: fd })
         const uploadData = await uploadRes.json()
-        if (!uploadRes.ok) { setError(uploadData.error); setSubmitting(false); return }
+        if (!uploadRes.ok) { setError(uploadData.error || 'Upload failed'); setSubmitting(false); return }
         finalUrl = uploadData.url
       }
 
@@ -197,11 +231,9 @@ function AddModal({
         body: JSON.stringify({ classId: resolvedClassId, title, type, url: finalUrl }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error); setSubmitting(false); return }
+      if (!res.ok) { setError(data.error || 'Could not save'); setSubmitting(false); return }
 
-      const listRes = await fetch('/api/study-guides')
-      const listData = await listRes.json()
-      onAdded(listData.groups ?? [], listData.classes ?? [])
+      onAdded()
     } catch {
       setError('Something went wrong.')
       setSubmitting(false)
@@ -210,12 +242,28 @@ function AddModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
+      <div
+        className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        className="fixed inset-0 z-40 flex items-center justify-center p-4"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-resource-title"
+      >
         <div className="w-full max-w-md border border-gray-200 bg-white p-6 shadow-xl">
           <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xs font-light text-gray-900">Add Resource</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors">
+            <h2 id="add-resource-title" className="text-xs font-light text-gray-900">
+              Add Resource
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-700 transition-colors"
+              aria-label="Close"
+            >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
@@ -224,8 +272,9 @@ function AddModal({
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-light text-gray-500">Class</label>
+              <label htmlFor="resource-class" className="text-xs font-light text-gray-500">Class</label>
               <select
+                id="resource-class"
                 value={classId}
                 onChange={(e) => setClassId(e.target.value === 'new' ? 'new' : Number(e.target.value))}
                 className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-900 transition-colors"
@@ -241,27 +290,32 @@ function AddModal({
                   value={newClassName}
                   onChange={(e) => setNewClassName(e.target.value)}
                   placeholder="e.g. Pre-Calculus (Spring)"
+                  maxLength={100}
                   className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors"
                 />
               )}
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-light text-gray-500">Title</label>
+              <label htmlFor="resource-title" className="text-xs font-light text-gray-500">Title</label>
               <input
+                id="resource-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Unit 7 Study Guide"
                 required
+                maxLength={200}
                 className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors"
               />
             </div>
 
-            <div className="flex gap-2">
+            <div role="tablist" aria-label="Resource type" className="flex gap-2">
               {(['link', 'pdf'] as const).map((t) => (
                 <button
                   key={t}
                   type="button"
+                  role="tab"
+                  aria-selected={type === t}
                   onClick={() => { setType(t); setUrl(''); setFile(null) }}
                   className={`flex-1 py-2 text-xs font-light transition-colors ${
                     type === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
@@ -279,29 +333,31 @@ function AddModal({
                 placeholder="https://…"
                 type="url"
                 required
+                maxLength={2048}
                 className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors"
               />
             ) : (
-              <div
+              <button
+                type="button"
                 onClick={() => fileRef.current?.click()}
                 className="cursor-pointer border border-dashed border-gray-300 bg-gray-50 px-4 py-5 text-center hover:border-gray-500 transition-colors"
               >
                 <input
                   ref={fileRef}
                   type="file"
-                  accept=".pdf"
+                  accept="application/pdf,.pdf"
                   className="hidden"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 />
                 {file ? (
                   <p className="text-sm text-gray-700">{file.name}</p>
                 ) : (
-                  <p className="text-xs text-gray-400">Click to select a PDF</p>
+                  <p className="text-xs text-gray-400">Click to select a PDF (max 10 MB)</p>
                 )}
-              </div>
+              </button>
             )}
 
-            {error && <p className="text-xs text-red-500">{error}</p>}
+            {error && <p className="text-xs text-red-500" role="alert">{error}</p>}
 
             <button
               type="submit"

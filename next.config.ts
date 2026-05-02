@@ -2,9 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   devIndicators: false,
-  async redirects() {
-    return [{ source: '/', destination: '/dashboard', permanent: false }]
-  },
+  poweredByHeader: false,
+  reactStrictMode: true,
 };
 
 export default nextConfig;

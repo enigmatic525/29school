@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
+import { loadStudyGuides } from '@/lib/study-guides'
 import {
   asTrimmedString,
   getClientIp,
@@ -18,30 +19,17 @@ export async function GET() {
   const auth = await requireAuth()
   if (!auth.ok) return auth.res
 
-  const { data, error } = await supabase
-    .from('study_guides')
-    .select('*, classes(name)')
-    .order('created_at', { ascending: true })
-
-  if (error) {
-    console.error('study-guides GET error', error)
-    return NextResponse.json({ error: 'Could not load' }, { status: 500 })
+  const result = await loadStudyGuides()
+  if ('error' in result) {
+    return NextResponse.json({ error: result.error }, { status: 500 })
   }
-
-  const map: Record<number, { id: number; name: string; guides: typeof data }> = {}
-  for (const guide of data ?? []) {
-    const cid = guide.class_id
-    if (!map[cid]) map[cid] = { id: cid, name: (guide.classes as any)?.name ?? '', guides: [] }
-    map[cid].guides.push(guide)
+  if (result.schemaMissing) {
+    return NextResponse.json(
+      { error: 'Study guides database is not initialized. Run supabase/schema.sql.', groups: [], classes: [] },
+      { status: 503 }
+    )
   }
-
-  const { data: classes, error: classesError } = await supabase.from('classes').select('*').order('name')
-  if (classesError) {
-    console.error('study-guides classes error', classesError)
-    return NextResponse.json({ error: 'Could not load' }, { status: 500 })
-  }
-
-  return NextResponse.json({ groups: Object.values(map), classes: classes ?? [] })
+  return NextResponse.json(result)
 }
 
 export async function POST(request: NextRequest) {
