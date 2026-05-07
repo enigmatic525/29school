@@ -87,11 +87,9 @@ export default function CalendarHeatmap({ assignments }: Props) {
   const chartRef = useRef<HTMLDivElement>(null)
 
   function chooseWeek(i: number) {
-    setSelectedWeekIdx((prev) => {
-      const next = selectWeek(prev, i)
-      if (next !== prev) setRescheduleLoading(false)
-      return next
-    })
+    setSelectedWeekIdx((prev) => selectWeek(prev, i))
+    setRescheduleLoading(false)
+    setTooltip(null)
   }
 
   const weeks = useMemo((): Week[] => {
@@ -120,10 +118,13 @@ export default function CalendarHeatmap({ assignments }: Props) {
   }, [assignments])
 
   const dailyData = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const todayMs = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() })()
+    const start = selectedWeekIdx !== null && weeks[selectedWeekIdx]
+      ? new Date(weeks[selectedWeekIdx].start)
+      : new Date(todayMs)
     return Array.from({ length: CHART_DAYS }, (_, i) => {
-      const dayStart = addDays(today, i)
+      const dayStart = addDays(start, i)
+      dayStart.setHours(0, 0, 0, 0)
       const dayEnd = new Date(dayStart)
       dayEnd.setHours(23, 59, 59, 999)
       const dayAssignments = assignments.filter((a) => {
@@ -131,9 +132,10 @@ export default function CalendarHeatmap({ assignments }: Props) {
         return due >= dayStart && due <= dayEnd
       })
       const score = dayAssignments.reduce((sum, a) => sum + getAssignmentScore(a.name), 0)
-      return { date: dayStart, score, dayAssignments }
+      const isToday = dayStart.getTime() === todayMs
+      return { date: dayStart, score, dayAssignments, isToday }
     })
-  }, [assignments])
+  }, [assignments, selectedWeekIdx, weeks])
 
   const maxDailyScore = useMemo(
     () => Math.max(...dailyData.map((d) => d.score), 1),
@@ -152,21 +154,27 @@ export default function CalendarHeatmap({ assignments }: Props) {
     if (selectedWeekIdx === null) return
     setRescheduleLoading(true)
     const week = weeks[selectedWeekIdx]
-    await fetch('/api/reschedule', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        week: week.label,
-        score: week.score,
-        assignments: week.assignments.map((a) => ({
-          name: a.name,
-          due_at: a.due_at,
-          courseCode: a.courseCode,
-        })),
-      }),
-    })
-    setRescheduleLoading(false)
-    setRequestedWeeks((prev) => new Set(prev).add(selectedWeekIdx))
+    const idx = selectedWeekIdx
+    try {
+      await fetch('/api/reschedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          week: week.label,
+          score: week.score,
+          assignments: week.assignments.map((a) => ({
+            name: a.name,
+            due_at: a.due_at,
+            courseCode: a.courseCode,
+          })),
+        }),
+      })
+      setRequestedWeeks((prev) => new Set(prev).add(idx))
+    } catch {
+      // Network error — let the user try again
+    } finally {
+      setRescheduleLoading(false)
+    }
   }
 
   const ticks = yTicks(maxDailyScore)
@@ -229,12 +237,12 @@ export default function CalendarHeatmap({ assignments }: Props) {
           <line x1={L} y1={T} x2={L} y2={B} stroke="#e5e7eb" strokeWidth={0.75} />
 
           {/* Bars + x-axis labels + hover zones */}
-          {dailyData.map(({ score, date }, i) => {
+          {dailyData.map(({ score, date, isToday }, i) => {
             const barH = score > 0 ? Math.max(3, (score / maxDailyScore) * PH) : 0
             const cx = L + (i + 0.5) * SLOT
             const bx = cx - BAR_W / 2
             const by = B - barH
-            const label = i === 0
+            const label = isToday
               ? 'Today'
               : date.toLocaleDateString('en-US', { weekday: 'short' })
             const isHovered = tooltip?.dayIdx === i
@@ -260,7 +268,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
                   <rect
                     x={bx} y={by} width={BAR_W} height={barH}
                     rx={4} ry={4}
-                    fill={isHovered ? '#374151' : i === 0 ? '#6b7280' : '#9ca3af'}
+                    fill={isHovered ? '#374151' : isToday ? '#6b7280' : '#9ca3af'}
                     style={{ transition: 'fill 120ms ease' }}
                   />
                 )}
@@ -269,7 +277,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
                   x={cx} y={B + 28}
                   textAnchor="middle"
                   fontSize={20}
-                  fill={i === 0 ? '#6b7280' : '#9ca3af'}
+                  fill={isToday ? '#6b7280' : '#9ca3af'}
                   fontFamily="inherit"
                 >
                   {label}
@@ -295,7 +303,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
             >
               <div className="px-3 py-2 border-b border-gray-100">
                 <p className="text-xs font-light text-gray-900">
-                  {tooltip.dayIdx === 0
+                  {day.isToday
                     ? 'Today'
                     : day.date.toLocaleDateString('en-US', { weekday: 'long' })}
                 </p>

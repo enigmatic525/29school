@@ -4,20 +4,9 @@ import { getSession } from '@/lib/session'
 import { fetchAllAssignments, getAssignmentScore, type CanvasAssignment } from '@/lib/canvas'
 import CalendarHeatmap from '@/components/CalendarHeatmap'
 
-function startOfDay(d: Date): Date {
-  const x = new Date(d)
-  x.setHours(0, 0, 0, 0)
-  return x
-}
-
-function endOfDay(d: Date): Date {
-  const x = new Date(d)
-  x.setHours(23, 59, 59, 999)
-  return x
-}
-
 function mondayOf(date: Date): Date {
-  const d = startOfDay(date)
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
   const day = d.getDay()
   d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
   return d
@@ -25,15 +14,14 @@ function mondayOf(date: Date): Date {
 
 function summarize(assignments: CanvasAssignment[]) {
   const now = new Date()
-  const todayStart = startOfDay(now)
-  const todayEnd = endOfDay(now)
+  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
+  const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
   const weekStart = mondayOf(now)
-  const weekEnd = endOfDay(new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000))
+  const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000)
+  weekEnd.setHours(23, 59, 59, 999)
 
   let dueToday = 0
   let weekScore = 0
-  let nextDue: CanvasAssignment | null = null
-  let nextDueAt = Infinity
 
   for (const a of assignments) {
     if (!a.due_at) continue
@@ -43,25 +31,9 @@ function summarize(assignments: CanvasAssignment[]) {
     if (t >= weekStart.getTime() && t <= weekEnd.getTime()) {
       weekScore += getAssignmentScore(a.name)
     }
-    if (t >= now.getTime() && t < nextDueAt) {
-      nextDueAt = t
-      nextDue = a
-    }
   }
 
-  return { dueToday, weekScore, nextDue, total: assignments.length }
-}
-
-function relativeWhen(due: Date): string {
-  const ms = due.getTime() - Date.now()
-  if (ms < 0) return 'overdue'
-  const minutes = Math.round(ms / 60000)
-  if (minutes < 60) return `in ${minutes} min`
-  const hours = Math.round(minutes / 60)
-  if (hours < 24) return `in ${hours}h`
-  const days = Math.round(hours / 24)
-  if (days < 14) return `in ${days}d`
-  return due.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return { dueToday, weekScore }
 }
 
 export default async function DashboardPage() {
@@ -98,9 +70,9 @@ export default async function DashboardPage() {
   }
 
   const { assignments } = await fetchAllAssignments(session.canvasToken)
-  const { dueToday, weekScore, nextDue, total } = summarize(assignments)
+  const { dueToday, weekScore } = summarize(assignments)
 
-  if (total === 0) {
+  if (assignments.length === 0) {
     return (
       <>
         <h1 className="mb-1 text-xl font-light">My Workload</h1>
@@ -121,20 +93,14 @@ export default async function DashboardPage() {
       <h1 className="mb-1 text-xl font-light">My Workload</h1>
       <p className="mb-8 text-xs text-gray-400">Pulled live from Canvas</p>
 
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard label="Due today" value={String(dueToday)} accent={dueToday > 0} />
+      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-2">
+        <SummaryCard label="Due today" value={String(dueToday)} />
         <SummaryCard
           label="This week"
           value={String(weekScore)}
           accent={weekScore >= 30}
           hint={weekScore >= 30 ? 'heavy' : undefined}
         />
-        <SummaryCard
-          label="Next due"
-          value={nextDue ? relativeWhen(new Date(nextDue.due_at!)) : '—'}
-          subtle={nextDue?.courseCode ?? ''}
-        />
-        <SummaryCard label="Tracked" value={String(total)} subtle="assignments" />
       </div>
 
       <CalendarHeatmap assignments={assignments} />
@@ -170,7 +136,7 @@ function SummaryCard({
         accent ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'
       }`}
     >
-      <p className="text-[10px] uppercase tracking-wider text-gray-400">{label}</p>
+      <p className="text-[10px] text-gray-400">{label}</p>
       <p
         className={`mt-1 text-lg font-light leading-none ${
           accent ? 'text-red-700' : 'text-gray-900'

@@ -32,9 +32,9 @@ interface RawGuide extends Guide {
 }
 
 function joinedName(raw: RawGuide['classes']): string {
-  if (!raw) return ''
-  if (Array.isArray(raw)) return raw[0]?.name ?? ''
-  return raw.name ?? ''
+  if (!raw) return 'Uncategorized'
+  if (Array.isArray(raw)) return raw[0]?.name || 'Uncategorized'
+  return raw.name || 'Uncategorized'
 }
 
 // PostgREST returns this code when the table doesn't exist or isn't in the

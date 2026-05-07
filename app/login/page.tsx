@@ -2,7 +2,6 @@
 
 import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import Link from 'next/link'
 
 function LoginContent() {
   const [token, setToken] = useState('')
@@ -69,7 +68,7 @@ function LoginContent() {
 
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4 relative">
-      {fromSettings ? (
+      {fromSettings && (
         <button
           type="button"
           onClick={() => router.back()}
@@ -81,13 +80,6 @@ function LoginContent() {
             <line x1="6" y1="6" x2="18" y2="18"/>
           </svg>
         </button>
-      ) : (
-        <Link
-          href="/"
-          className="absolute top-5 left-5 text-xs text-gray-400 hover:text-gray-700 transition-colors"
-        >
-          ← Back
-        </Link>
       )}
 
       <div className="w-full max-w-sm">

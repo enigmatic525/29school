@@ -55,51 +55,99 @@ export default function StudyGuides({
 }: Props) {
   const [groups, setGroups] = useState<ClassGroup[]>(initialGroups)
   const [classes, setClasses] = useState<DBClass[]>(initialClasses)
+  const [error, setError] = useState<string | null>(initialError)
   const [modalOpen, setModalOpen] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
 
   async function refresh() {
     try {
       const res = await fetch('/api/study-guides', { cache: 'no-store' })
-      if (!res.ok) return
       const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Could not load study guides')
+        return
+      }
+      setError(null)
       setGroups(data.groups ?? [])
       setClasses(data.classes ?? [])
     } catch {
-      // Silent: caller already updated optimistically; next render still has stale-but-correct data.
+      setError('Could not load study guides')
     }
+  }
+
+  async function handleDelete(guideId: number) {
+    setDeletingId(guideId)
+    try {
+      const res = await fetch(`/api/study-guides/${guideId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setError(data.error ?? 'Could not delete')
+        setDeletingId(null)
+        return
+      }
+      setGroups((prev) =>
+        prev
+          .map((g) => ({ ...g, guides: g.guides.filter((guide) => guide.id !== guideId) }))
+          .filter((g) => g.guides.length > 0)
+      )
+    } catch {
+      setError('Could not delete')
+    }
+    setDeletingId(null)
   }
 
   if (schemaMissing) {
     return (
-      <div className="border border-amber-200 bg-amber-50 p-6">
-        <p className="text-xs font-medium text-amber-800 mb-1">Study guides database isn&apos;t set up yet</p>
-        <p className="text-xs text-amber-700 leading-relaxed">
-          {supabaseHost ? (
-            <>
-              The Supabase project at{' '}
-              <code className="px-1 bg-amber-100 rounded text-[11px]">{supabaseHost}</code> doesn&apos;t
-              have the required tables.
-            </>
-          ) : (
-            <>The Supabase project doesn&apos;t have the required tables.</>
-          )}{' '}
-          To enable this tab,{' '}
-          {sqlEditorUrl ? (
-            <a
-              href={sqlEditorUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline font-medium text-amber-900 hover:text-amber-800"
-            >
-              open the SQL Editor
-            </a>
-          ) : (
-            <>open your Supabase dashboard and go to <strong>SQL Editor</strong></>
-          )}
-          , paste the contents of{' '}
-          <code className="px-1 bg-amber-100 rounded text-[11px]">supabase/schema.sql</code> from
-          this repo, and click <strong>Run</strong>. Reload this page when finished.
-        </p>
+      <div className="border border-amber-200 bg-amber-50 p-6 flex flex-col gap-4">
+        <div>
+          <p className="text-sm font-medium text-amber-900 mb-1">Database tables need to be created</p>
+          <p className="text-xs text-amber-700 leading-relaxed">
+            The study guides feature stores data in Supabase, but the required tables don&apos;t exist yet
+            {supabaseHost && (
+              <> in your project at <code className="px-1 bg-amber-100 rounded text-[11px]">{supabaseHost}</code></>
+            )}.
+            Follow the steps below — it takes about two minutes.
+          </p>
+        </div>
+
+        <ol className="flex flex-col gap-3 text-xs text-amber-800">
+          <li className="flex gap-3">
+            <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-amber-200 text-amber-900 font-medium text-[10px]">1</span>
+            <span className="pt-0.5">
+              {sqlEditorUrl ? (
+                <>
+                  <a
+                    href={sqlEditorUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium underline text-amber-900 hover:text-amber-700"
+                  >
+                    Open the Supabase SQL Editor
+                  </a>
+                  {' '}(this link goes directly to your project&apos;s SQL editor).
+                </>
+              ) : (
+                <>Go to <strong>supabase.com/dashboard</strong>, select your project, then click <strong>SQL Editor</strong> in the left sidebar.</>
+              )}
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-amber-200 text-amber-900 font-medium text-[10px]">2</span>
+            <span className="pt-0.5">
+              In your code editor, open{' '}
+              <code className="px-1 bg-amber-100 rounded text-[11px]">supabase/schema.sql</code>{' '}
+              and copy its entire contents.
+            </span>
+          </li>
+          <li className="flex gap-3">
+            <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-amber-200 text-amber-900 font-medium text-[10px]">3</span>
+            <span className="pt-0.5">Paste into the SQL Editor and click <strong>Run</strong> (or press <kbd className="px-1 bg-amber-100 rounded text-[11px]">⌘ Enter</kbd>). You should see a &ldquo;Success&rdquo; message.</span>
+          </li>
+          <li className="flex gap-3">
+            <span className="shrink-0 flex items-center justify-center w-5 h-5 rounded-full bg-amber-200 text-amber-900 font-medium text-[10px]">4</span>
+            <span className="pt-0.5">Reload this page — the study guides tab will work immediately.</span>
+          </li>
+        </ol>
       </div>
     )
   }
@@ -120,11 +168,11 @@ export default function StudyGuides({
         </button>
       </div>
 
-      {initialError ? (
+      {error ? (
         <div className="border border-red-200 bg-red-50 p-6 text-center">
-          <p className="text-sm text-red-600">{initialError}</p>
+          <p className="text-sm text-red-600">{error}</p>
         </div>
-      ) : groups.length === 0 && classes.length === 0 ? (
+      ) : groups.length === 0 ? (
         <div className="border border-dashed border-gray-300 p-10 text-center">
           <p className="text-sm text-gray-400">No resources yet.</p>
           <button
@@ -147,12 +195,12 @@ export default function StudyGuides({
               </div>
               <ul className="flex flex-col gap-1.5">
                 {group.guides.map((guide) => (
-                  <li key={guide.id}>
+                  <li key={guide.id} className="flex items-stretch gap-0">
                     <a
                       href={safeHref(guide.url)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-3 border border-gray-200 bg-white px-4 py-3 hover:bg-gray-50 transition-colors group"
+                      className="flex flex-1 items-center gap-3 border border-gray-200 bg-white px-4 py-3 hover:bg-gray-50 transition-colors group border-r-0"
                     >
                       <span className="text-gray-400 shrink-0" aria-hidden="true">
                         {guide.type === 'pdf' ? (
@@ -174,6 +222,20 @@ export default function StudyGuides({
                         {fmt(guide.created_at)}
                       </span>
                     </a>
+                    <button
+                      onClick={() => handleDelete(guide.id)}
+                      disabled={deletingId === guide.id}
+                      aria-label={`Delete ${guide.title}`}
+                      className="flex items-center justify-center border border-gray-200 bg-white px-3 text-gray-300 hover:text-red-400 hover:bg-red-50 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6"/>
+                        <path d="M14 11v6"/>
+                        <path d="M9 6V4h6v2"/>
+                      </svg>
+                    </button>
                   </li>
                 ))}
               </ul>
