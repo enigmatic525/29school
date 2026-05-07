@@ -156,7 +156,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
     const week = weeks[selectedWeekIdx]
     const idx = selectedWeekIdx
     try {
-      await fetch('/api/reschedule', {
+      const res = await fetch('/api/reschedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -169,7 +169,7 @@ export default function CalendarHeatmap({ assignments }: Props) {
           })),
         }),
       })
-      setRequestedWeeks((prev) => new Set(prev).add(idx))
+      if (res.ok) setRequestedWeeks((prev) => new Set(prev).add(idx))
     } catch {
       // Network error — let the user try again
     } finally {

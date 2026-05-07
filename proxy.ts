@@ -39,8 +39,10 @@ export function proxy(request: NextRequest) {
 
   // Per-nonce CSP would be ideal, but Next.js inlines hydration scripts.
   // 'unsafe-inline' is required for Next; everything else is locked down.
-  // Supabase storage is allow-listed for img-src so embedded study-guide
-  // thumbnails work, but only over https.
+  // The client makes no external fetch calls (all Canvas/Supabase calls are
+  // server-side), so connect-src is limited to same-origin. unsafe-eval is
+  // needed in dev (Turbopack HMR) but stripped in production.
+  const isProd = process.env.NODE_ENV === 'production'
   const csp = [
     "default-src 'self'",
     "base-uri 'self'",
@@ -50,8 +52,8 @@ export function proxy(request: NextRequest) {
     "img-src 'self' data: blob: https:",
     "font-src 'self' data: https://fonts.gstatic.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-    "connect-src 'self' https:",
+    isProd ? "script-src 'self' 'unsafe-inline'" : "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+    isProd ? "connect-src 'self'" : "connect-src 'self' https: wss:",
     "frame-src 'none'",
     "worker-src 'self' blob:",
     'upgrade-insecure-requests',

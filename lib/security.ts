@@ -80,8 +80,8 @@ export async function readJson<T = unknown>(
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     return { ok: false, status: 413, error: 'Payload too large' }
   }
-  const contentType = (request.headers.get('content-type') ?? '').toLowerCase()
-  if (!contentType.includes('application/json')) {
+  const contentType = (request.headers.get('content-type') ?? '').toLowerCase().split(';')[0]!.trim()
+  if (contentType !== 'application/json') {
     return { ok: false, status: 415, error: 'Unsupported content type' }
   }
   let text: string
@@ -141,9 +141,17 @@ export async function requireSession(): Promise<
 // ---------- Client IP extraction (best-effort, used for rate limiting only) ----------
 
 export function getClientIp(request: NextRequest): string {
-  const fwd = request.headers.get('x-forwarded-for')
-  if (fwd) return fwd.split(',')[0]!.trim()
+  // x-real-ip is set by Vercel's edge and cannot be spoofed by the client.
+  // x-forwarded-for[0] is the leftmost entry and CAN be spoofed (client can
+  // prepend anything before the request reaches the proxy), so we only fall
+  // back to it and take the rightmost entry that the trusted proxy appended.
   const real = request.headers.get('x-real-ip')
   if (real) return real.trim()
+  const fwd = request.headers.get('x-forwarded-for')
+  if (fwd) {
+    // Take the last entry — added by the outermost trusted proxy.
+    const entries = fwd.split(',')
+    return entries[entries.length - 1]!.trim()
+  }
   return 'unknown'
 }
