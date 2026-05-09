@@ -13,9 +13,13 @@ export async function POST(request: NextRequest) {
   }
 
   // Brute-force defense: 8 login attempts per IP per 15 minutes.
-  const ip = getClientIp(request)
-  const limit = rateLimit(`auth:${ip}`, 8, 15 * 60 * 1000)
-  if (!limit.allowed) return rateLimitResponse(limit)
+  // In dev there is no reverse proxy, so all requests share the same 'unknown'
+  // bucket and would trip the limit during normal testing.
+  if (process.env.NODE_ENV === 'production') {
+    const ip = getClientIp(request)
+    const limit = rateLimit(`auth:${ip}`, 8, 15 * 60 * 1000)
+    if (!limit.allowed) return rateLimitResponse(limit)
+  }
 
   const parsed = await readJson<{ token?: unknown; guest?: unknown }>(request, 4 * 1024)
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status })

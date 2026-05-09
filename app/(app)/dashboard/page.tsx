@@ -1,61 +1,26 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/session'
-import { fetchAllAssignments, getAssignmentScore, type CanvasAssignment } from '@/lib/canvas'
+import { fetchAllAssignments } from '@/lib/canvas'
 import CalendarHeatmap from '@/components/CalendarHeatmap'
-
-function mondayOf(date: Date): Date {
-  const d = new Date(date)
-  d.setHours(0, 0, 0, 0)
-  const day = d.getDay()
-  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1))
-  return d
-}
-
-function summarize(assignments: CanvasAssignment[]) {
-  const now = new Date()
-  const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0)
-  const todayEnd = new Date(now); todayEnd.setHours(23, 59, 59, 999)
-  const weekStart = mondayOf(now)
-  const weekEnd = new Date(weekStart.getTime() + 6 * 24 * 60 * 60 * 1000)
-  weekEnd.setHours(23, 59, 59, 999)
-
-  let dueToday = 0
-  let weekScore = 0
-
-  for (const a of assignments) {
-    if (!a.due_at) continue
-    const due = new Date(a.due_at)
-    const t = due.getTime()
-    if (t >= todayStart.getTime() && t <= todayEnd.getTime()) dueToday++
-    if (t >= weekStart.getTime() && t <= weekEnd.getTime()) {
-      weekScore += getAssignmentScore(a.name)
-    }
-  }
-
-  return { dueToday, weekScore }
-}
 
 export default async function DashboardPage() {
   const session = await getSession()
-  // Defense-in-depth: the layout redirects unauthenticated requests, but in
-  // Next 16 the page renders in parallel with the layout. Re-check here.
   if (!session.isLoggedIn) redirect('/login')
 
-  // Guest mode: no Canvas token, show CTA instead of trying to fetch.
   if (!session.canvasToken) {
     return (
       <>
-        <h1 className="mb-1 text-xl font-light">My Workload</h1>
+        <h1 className="mb-1 text-xl font-light">My Dashboard</h1>
         <p className="mb-8 text-xs text-gray-400">
           You&apos;re using 29.school without a Canvas token.
         </p>
         <div className="border border-gray-200 bg-gray-50 p-8">
           <p className="text-sm font-medium text-gray-900 mb-2">
-            Connect Canvas to see your workload
+            Connect Canvas to see your Dashboard
           </p>
           <p className="text-sm text-gray-500 leading-relaxed mb-5">
-            The workload calendar pulls due dates from your Canvas account. Connect now to enable
+            The Dashboard pulls due dates from your Canvas account. Connect now to enable
             it — or keep using feedback, study guides, and the notice board.
           </p>
           <Link
@@ -70,12 +35,11 @@ export default async function DashboardPage() {
   }
 
   const { assignments } = await fetchAllAssignments(session.canvasToken)
-  const { dueToday, weekScore } = summarize(assignments)
 
   if (assignments.length === 0) {
     return (
       <>
-        <h1 className="mb-1 text-xl font-light">My Workload</h1>
+        <h1 className="mb-1 text-xl font-light">My Dashboard</h1>
         <p className="mb-8 text-xs text-gray-400">Pulled live from Canvas</p>
         <div className="border border-dashed border-gray-300 p-12 text-center">
           <p className="text-sm text-gray-500">No assignments with due dates yet.</p>
@@ -90,70 +54,9 @@ export default async function DashboardPage() {
 
   return (
     <>
-      <h1 className="mb-1 text-xl font-light">My Workload</h1>
+      <h1 className="mb-1 text-xl font-light">My Dashboard</h1>
       <p className="mb-8 text-xs text-gray-400">Pulled live from Canvas</p>
-
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-2">
-        <SummaryCard label="Due today" value={String(dueToday)} />
-        <SummaryCard
-          label="This week"
-          value={String(weekScore)}
-          accent={weekScore >= 30}
-          hint={weekScore >= 30 ? 'heavy' : undefined}
-        />
-      </div>
-
       <CalendarHeatmap assignments={assignments} />
-
-      <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-gray-400">
-        <span className="font-medium text-gray-500">Scoring:</span>
-        <Legend className="bg-red-100 text-red-600" label="MA · 10" />
-        <Legend className="bg-amber-100 text-amber-700" label="QA · 5" />
-        <Legend className="bg-blue-100 text-blue-600" label="HW · 1" />
-        <Legend className="bg-gray-100 text-gray-500" label="Other · 0" />
-        <span className="ml-auto">Weeks with score ≥ 30 are flagged red.</span>
-      </div>
     </>
-  )
-}
-
-function SummaryCard({
-  label,
-  value,
-  hint,
-  subtle,
-  accent,
-}: {
-  label: string
-  value: string
-  hint?: string
-  subtle?: string
-  accent?: boolean
-}) {
-  return (
-    <div
-      className={`border p-3 ${
-        accent ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'
-      }`}
-    >
-      <p className="text-[10px] text-gray-400">{label}</p>
-      <p
-        className={`mt-1 text-lg font-light leading-none ${
-          accent ? 'text-red-700' : 'text-gray-900'
-        }`}
-      >
-        {value}
-        {hint && <span className="ml-1.5 text-[10px] text-red-500 align-middle">{hint}</span>}
-      </p>
-      {subtle && <p className="mt-1 text-[10px] text-gray-400">{subtle}</p>}
-    </div>
-  )
-}
-
-function Legend({ className, label }: { className: string; label: string }) {
-  return (
-    <span className={`inline-flex rounded-sm px-1.5 py-0.5 text-[10px] font-light ${className}`}>
-      {label}
-    </span>
   )
 }

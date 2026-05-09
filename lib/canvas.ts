@@ -13,6 +13,7 @@ export interface CanvasAssignment {
   submission_types: string[]
   html_url: string
   is_quiz_assignment: boolean
+  description?: string | null
   // added by our fetch layer
   courseName?: string
   courseCode?: string
@@ -82,6 +83,86 @@ export function getAssignmentType(name: string): AssignmentType {
   if (prefix.startsWith('HW:') || prefix.startsWith('HW ')) return 'hw'
   if (prefix.startsWith('CW:') || prefix.startsWith('CW ')) return 'cw'
   return 'other'
+}
+
+export async function submitTextOrUrl(
+  token: string,
+  courseId: number,
+  assignmentId: number,
+  type: 'online_text_entry' | 'online_url',
+  payload: { body?: string; url?: string }
+) {
+  const res = await fetch(
+    `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions`,
+    {
+      method: 'POST',
+      headers: { ...headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ submission: { submission_type: type, ...payload } }),
+    }
+  )
+  if (!res.ok) throw new Error(`Canvas submission failed: ${res.status}`)
+  return res.json()
+}
+
+export async function submitFileAssignment(
+  token: string,
+  courseId: number,
+  assignmentId: number,
+  file: { name: string; size: number; type: string; buffer: ArrayBuffer }
+) {
+  // Step 1: Tell Canvas about the file to get an upload URL
+  const initRes = await fetch(
+    `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/self/files`,
+    {
+      method: 'POST',
+      headers: { ...headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: file.name,
+        size: file.size,
+        content_type: file.type || 'application/octet-stream',
+        on_duplicate: 'rename',
+      }),
+    }
+  )
+  if (!initRes.ok) throw new Error(`File upload init failed: ${initRes.status}`)
+  const { upload_url, upload_params } = await initRes.json()
+
+  // Step 2: Upload to Canvas/S3 storage
+  const fd = new FormData()
+  for (const [k, v] of Object.entries(upload_params as Record<string, string>)) {
+    fd.append(k, v)
+  }
+  fd.append('file', new Blob([file.buffer], { type: file.type }), file.name)
+
+  const uploadRes = await fetch(upload_url, { method: 'POST', body: fd, redirect: 'manual' })
+
+  let fileId: number
+  if (uploadRes.status >= 300 && uploadRes.status < 400) {
+    // S3 redirects back to Canvas to confirm — follow with auth header
+    const location = uploadRes.headers.get('location')
+    if (!location) throw new Error('Upload redirect missing Location header')
+    const confirmRes = await fetch(location, { headers: headers(token) })
+    if (!confirmRes.ok) throw new Error(`File confirm failed: ${confirmRes.status}`)
+    fileId = (await confirmRes.json()).id
+  } else if (uploadRes.ok) {
+    fileId = (await uploadRes.json()).id
+  } else {
+    throw new Error(`File upload failed: ${uploadRes.status}`)
+  }
+
+  // Step 3: Submit the assignment with the uploaded file ID
+  const submitRes = await fetch(
+    `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions`,
+    {
+      method: 'POST',
+      headers: { ...headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        submission: { submission_type: 'online_upload', file_ids: [fileId] },
+      }),
+    }
+  )
+  if (!submitRes.ok) throw new Error(`Assignment submit failed: ${submitRes.status}`)
+  return submitRes.json()
 }
 
 export function getAssignmentScore(name: string): number {

@@ -203,7 +203,7 @@ function LoginContent() {
                 Are you sure?
               </h2>
               <p className="text-sm text-gray-500 leading-relaxed mb-5">
-                You won&apos;t be able to set up your workload dashboard, but other features will
+                You won&apos;t be able to use your Dashboard, but other features will
                 be available.
               </p>
               <div className="flex justify-end gap-2">

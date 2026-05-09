@@ -26,6 +26,31 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Canvas assignment description HTML */
+.prose-assignment p { margin-bottom: 0.75rem; }
+.prose-assignment p:last-child { margin-bottom: 0; }
+.prose-assignment ul, .prose-assignment ol { padding-left: 1.25rem; margin-bottom: 0.75rem; }
+.prose-assignment ul { list-style-type: disc; }
+.prose-assignment ol { list-style-type: decimal; }
+.prose-assignment li { margin-bottom: 0.25rem; }
+.prose-assignment h1, .prose-assignment h2, .prose-assignment h3 {
+  font-weight: 400; margin-bottom: 0.5rem; margin-top: 1rem; color: #111;
+}
+.prose-assignment h1 { font-size: 1rem; }
+.prose-assignment h2 { font-size: 0.9rem; }
+.prose-assignment h3 { font-size: 0.85rem; }
+.prose-assignment a { color: #374151; text-decoration: underline; }
+.prose-assignment strong { font-weight: 500; }
+.prose-assignment em { font-style: italic; }
+.prose-assignment pre, .prose-assignment code {
+  font-family: ui-monospace, monospace; font-size: 0.8rem;
+  background: #f3f4f6; padding: 0.1rem 0.3rem; border-radius: 3px;
+}
+.prose-assignment img { max-width: 100%; height: auto; }
+.prose-assignment table { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; font-size: 0.8rem; }
+.prose-assignment th, .prose-assignment td { border: 1px solid #e5e7eb; padding: 0.4rem 0.6rem; text-align: left; }
+.prose-assignment th { background: #f9fafb; font-weight: 500; }
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

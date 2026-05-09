@@ -20,13 +20,13 @@ export const metadata: Metadata = {
     template: "%s · 29.school",
   },
   description:
-    "Workload calendar, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
+    "Dashboard, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
   applicationName: "29.school",
   authors: [{ name: "Class of 2029" }],
   keywords: [
     "Eastside Prep",
     "Class of 2029",
-    "workload calendar",
+    "dashboard",
     "Canvas",
     "study guides",
   ],
@@ -36,13 +36,13 @@ export const metadata: Metadata = {
     siteName: "29.school",
     title: "29.school — Tools for the Eastside Prep Class of 2029",
     description:
-      "Workload calendar, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
+      "Dashboard, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
   },
   twitter: {
     card: "summary",
     title: "29.school",
     description:
-      "Workload calendar, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
+      "Dashboard, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
   },
   robots: { index: true, follow: true },
 };

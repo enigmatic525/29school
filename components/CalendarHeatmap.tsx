@@ -1,8 +1,10 @@
 'use client'
 
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas'
 import { getAssignmentType, getAssignmentScore } from '@/lib/canvas'
+import SubmitModal from './SubmitModal'
+import AssignmentDetail from './AssignmentDetail'
 
 interface Props {
   assignments: CanvasAssignment[]
@@ -34,16 +36,6 @@ function fmt(date: Date): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function safeHref(raw: string | undefined | null): string {
-  if (!raw) return '#'
-  try {
-    const u = new URL(raw)
-    return u.protocol === 'http:' || u.protocol === 'https:' ? raw : '#'
-  } catch {
-    return '#'
-  }
-}
-
 function yTicks(maxVal: number): number[] {
   if (maxVal <= 1) return [0, 1]
   if (maxVal <= 5) return [0, maxVal]
@@ -55,40 +47,421 @@ function yTicks(maxVal: number): number[] {
   return [0, step, top]
 }
 
-const TOTAL_WEEKS = 8
-const CHART_DAYS = 7
-
-// SVG coordinate system
-const VW = 1000
-const VH = 500
-const L = 52   // left padding (y-axis labels)
-const R = 1000 // right edge
-const T = 14   // top padding
-const B = 458  // bottom edge (x-axis labels sit below)
-const PW = R - L  // plot width  = 948
-const PH = B - T  // plot height = 444
-const SLOT = PW / CHART_DAYS   // ~135.4 per day
-const BAR_W = SLOT * 0.52      // ~70.4
-
-function selectWeek(prev: number | null, next: number | null): number | null {
-  return prev === next ? null : next
+function toDateStr(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
+// Parse YYYY-MM-DD as local noon to avoid UTC-midnight-to-previous-day shift.
+function parseDateStr(str: string): Date {
+  const [y, m, d] = str.split('-').map(Number)
+  return new Date(y, m - 1, d, 12, 0, 0)
+}
+
+const TOTAL_WEEKS = 8
+const CHART_DAYS = 30
+const VW = 1000
+const VH = 500
+const L = 52
+const R = 1000
+const T = 14
+const B = 458
+const PW = R - L
+const PH = B - T
+const SLOT = PW / CHART_DAYS
+const BAR_W = SLOT * 0.7
+
+// ─── Move-to-date popup ───────────────────────────────────────────────────────
+
+function MoveDatePopup({
+  assignment,
+  currentDateStr,
+  onSelect,
+  onClose,
+}: {
+  assignment: CanvasAssignment
+  currentDateStr: string | undefined
+  onSelect: (dateStr: string | null) => void
+  onClose: () => void
+}) {
+  const actual = new Date(assignment.due_at!)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const actualStr = toDateStr(actual)
+
+  const weekStart = mondayOf(today)
+  const allDates: Date[] = []
+  let cur = new Date(weekStart)
+  while (cur <= actual) {
+    allDates.push(new Date(cur))
+    cur = addDays(cur, 1)
+  }
+
+  type WeekGroup = { label: string; dates: Date[] }
+  const groups: WeekGroup[] = []
+  for (const d of allDates) {
+    const mon = mondayOf(d)
+    const last = groups[groups.length - 1]
+    const lastMon = last?.dates[0] ? mondayOf(last.dates[0]) : null
+    if (!lastMon || mon.getTime() !== lastMon.getTime()) {
+      groups.push({ label: `${fmt(mon)} – ${fmt(addDays(mon, 6))}`, dates: [d] })
+    } else {
+      last.dates.push(d)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0"
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="w-full max-w-sm bg-white border border-gray-200 shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-gray-200 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-[10px] text-gray-400 mb-0.5">{assignment.courseCode}</p>
+            <h2 className="text-sm font-light text-gray-900 leading-snug line-clamp-2">
+              {assignment.name}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 mt-0.5 text-xs text-gray-400 hover:text-gray-700 transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="px-4 py-3 flex flex-col gap-3 max-h-72 overflow-y-auto">
+          <p className="text-[11px] text-gray-400">Move planned date to…</p>
+          {groups.map((group, gi) => (
+            <div key={gi} className="flex flex-col gap-1.5">
+              <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider">
+                {group.label}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {group.dates.map((d) => {
+                  const str = toDateStr(d)
+                  const isPast = d < today
+                  const isActualDue = str === actualStr
+                  const isCurrent = str === currentDateStr
+                  return (
+                    <button
+                      key={str}
+                      onClick={() => !isPast && onSelect(str)}
+                      disabled={isPast}
+                      className={`px-2.5 py-1 text-[11px] border transition-colors ${
+                        isCurrent
+                          ? 'border-gray-900 bg-gray-900 text-white'
+                          : isActualDue
+                          ? 'border-gray-400 text-gray-700 hover:border-gray-900'
+                          : isPast
+                          ? 'border-gray-100 text-gray-300 cursor-not-allowed'
+                          : 'border-gray-200 text-gray-600 hover:border-gray-500'
+                      }`}
+                    >
+                      {d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                      {isActualDue && <span className="ml-1 text-[10px] text-gray-400">due</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        {currentDateStr && currentDateStr !== actualStr && (
+          <div className="border-t border-gray-100 px-4 py-2.5">
+            <button
+              onClick={() => onSelect(null)}
+              className="text-[11px] text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              Reset to actual due date
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Monthly calendar ─────────────────────────────────────────────────────────
+
+function MonthCalendar({
+  assignments,
+  plannedDates,
+  onMove,
+  onDetail,
+}: {
+  assignments: CanvasAssignment[]
+  plannedDates: Record<number, string>
+  onMove: (a: CanvasAssignment) => void
+  onDetail: (a: CanvasAssignment) => void
+}) {
+  const [viewDate, setViewDate] = useState(() => {
+    const d = new Date()
+    d.setDate(1)
+    d.setHours(0, 0, 0, 0)
+    return d
+  })
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dragOverStr, setDragOverStr] = useState<string | null>(null)
+
+  const draggingDueStr: string | null = dragId !== null
+    ? (() => { const a = assignments.find((x) => x.id === dragId); return a ? toDateStr(new Date(a.due_at!)) : null })()
+    : null
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  function getEff(a: CanvasAssignment): Date {
+    const planned = plannedDates[a.id]
+    if (planned) {
+      const p = parseDateStr(planned)
+      if (p <= new Date(a.due_at!)) return p
+    }
+    return new Date(a.due_at!)
+  }
+
+  // All calendar days for the current month view (Mon → Sun grid).
+  const calendarDays = useMemo(() => {
+    const first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1)
+    const last = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0)
+    const gridStart = mondayOf(first)
+    const lastDow = last.getDay()
+    const gridEnd = addDays(last, lastDow === 0 ? 0 : 7 - lastDow)
+    const days: Date[] = []
+    let cur = new Date(gridStart)
+    while (cur <= gridEnd) {
+      days.push(new Date(cur))
+      cur = addDays(cur, 1)
+    }
+    return days
+  }, [viewDate])
+
+  // Map YYYY-MM-DD → assignments planned/due that day.
+  const byDay = useMemo(() => {
+    const map: Record<string, CanvasAssignment[]> = {}
+    for (const a of assignments) {
+      const str = toDateStr(getEff(a))
+      if (!map[str]) map[str] = []
+      map[str].push(a)
+    }
+    return map
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignments, plannedDates])
+
+  function handleDrop(day: Date, id: number) {
+    const a = assignments.find((x) => x.id === id)
+    if (!a) return
+    const target = new Date(day)
+    target.setHours(12, 0, 0, 0)
+    if (target > new Date(a.due_at!)) return
+    // direct import of outer setPlannedDate not available here — handled via prop
+    onMove({ ...a, _dropTarget: toDateStr(day) } as CanvasAssignment & { _dropTarget: string })
+  }
+
+  function typeBg(type: ReturnType<typeof getAssignmentType>) {
+    if (type === 'ma') return 'bg-red-50 text-red-700'
+    if (type === 'qa') return 'bg-amber-50 text-amber-700'
+    if (type === 'hw') return 'bg-blue-50 text-blue-700'
+    return 'bg-gray-100 text-gray-600'
+  }
+
+  const monthLabel = viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  return (
+    <div className="flex flex-col gap-0">
+      {/* Month navigation */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          onClick={() => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}
+          className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-400 transition-colors"
+        >
+          ←
+        </button>
+        <span className="text-sm font-light text-gray-900">{monthLabel}</span>
+        <button
+          onClick={() => setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + 1, 1))}
+          className="px-3 py-1.5 text-xs text-gray-400 hover:text-gray-700 border border-gray-200 hover:border-gray-400 transition-colors"
+        >
+          →
+        </button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div className="grid grid-cols-7 border-l border-t border-gray-200">
+        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((label) => (
+          <div
+            key={label}
+            className="border-r border-b border-gray-200 py-1.5 text-center text-[10px] font-medium text-gray-400 uppercase tracking-wider"
+          >
+            {label}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 border-l border-gray-200">
+        {calendarDays.map((day, i) => {
+          const str = toDateStr(day)
+          const inMonth = day.getMonth() === viewDate.getMonth()
+          const isToday = day.getTime() === today.getTime()
+          const isPast = day < today
+          const items = byDay[str] ?? []
+          const isOver = dragOverStr === str
+          // Show all 4 if only 1 would be hidden — "+1 more" is never worth hiding.
+          const showAll = items.length <= 4
+          const shown = showAll ? items : items.slice(0, 3)
+          const overflow = showAll ? 0 : items.length - 3
+          // Invalid drop target: this day is after the dragged assignment's due date.
+          const isInvalid = draggingDueStr !== null && str > draggingDueStr
+          const cellBg = isInvalid
+            ? 'bg-gray-100'
+            : isOver
+            ? 'bg-blue-50'
+            : !inMonth
+            ? 'bg-gray-50/60'
+            : isToday
+            ? 'bg-gray-50'
+            : 'bg-white'
+
+          return (
+            <div
+              key={i}
+              onDragOver={(e) => { if (!isInvalid) { e.preventDefault(); setDragOverStr(str) } }}
+              onDragLeave={(e) => {
+                const rel = e.relatedTarget as Node | null
+                if (!rel || !e.currentTarget.contains(rel)) setDragOverStr(null)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                const id = Number(e.dataTransfer.getData('text/plain'))
+                const a = assignments.find((x) => x.id === id)
+                if (a && str <= toDateStr(new Date(a.due_at!))) {
+                  onMove(Object.assign({}, a, { __dropDate: str }))
+                }
+                setDragOverStr(null)
+                setDragId(null)
+              }}
+              className={`min-h-[120px] border-r border-b border-gray-200 p-1.5 flex flex-col gap-1 transition-colors ${cellBg}`}
+            >
+              {/* Date number */}
+              <div className="flex justify-end mb-0.5">
+                <span
+                  className={`text-[10px] leading-none flex items-center justify-center ${
+                    isToday
+                      ? 'w-4 h-4 rounded-full bg-gray-900 text-white text-[9px]'
+                      : inMonth
+                      ? isPast ? 'text-gray-300' : 'text-gray-500'
+                      : 'text-gray-200'
+                  }`}
+                >
+                  {day.getDate()}
+                </span>
+              </div>
+
+              {/* Assignment chips */}
+              {shown.map((a) => {
+                const type = getAssignmentType(a.name)
+                const isShifted = !!plannedDates[a.id]
+                return (
+                  <div
+                    key={a.id}
+                    draggable
+                    onClick={() => onDetail(a)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(a.id))
+                      e.dataTransfer.effectAllowed = 'move'
+                      setDragId(a.id)
+                    }}
+                    onDragEnd={() => { setDragId(null); setDragOverStr(null) }}
+                    className={`flex items-center gap-1 px-1 py-0.5 rounded-sm text-[10px] leading-tight cursor-pointer select-none transition-opacity ${
+                      dragId === a.id ? 'opacity-40' : isInvalid ? 'opacity-40' : ''
+                    } ${typeBg(type)}`}
+                    title={a.name}
+                  >
+                    <span className="truncate flex-1 min-w-0">{a.name}</span>
+                    {isShifted && (
+                      <span className="shrink-0 opacity-50 text-[8px]">↑</span>
+                    )}
+                  </div>
+                )
+              })}
+
+              {overflow > 0 && (
+                <span className="text-[9px] text-gray-400 px-1">+{overflow} more</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[10px] text-gray-400">
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-red-100 inline-block"/>MA</span>
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-amber-100 inline-block"/>QA</span>
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-blue-100 inline-block"/>HW</span>
+        <span className="inline-flex items-center gap-1"><span className="w-2 h-2 rounded-sm bg-gray-100 inline-block"/>Other</span>
+        <span className="ml-auto opacity-60">↑ = shifted from due date</span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export default function CalendarHeatmap({ assignments }: Props) {
+  const [activeTab, setActiveTab] = useState<'overview' | 'calendar'>('calendar')
   const [selectedWeekIdx, setSelectedWeekIdx] = useState<number | null>(null)
-  const [requestedWeeks, setRequestedWeeks] = useState<Set<number>>(new Set())
-  const [rescheduleLoading, setRescheduleLoading] = useState(false)
+  const [submittingAssignment, setSubmittingAssignment] = useState<CanvasAssignment | null>(null)
+  const [movingAssignment, setMovingAssignment] = useState<CanvasAssignment | null>(null)
+  const [detailAssignment, setDetailAssignment] = useState<CanvasAssignment | null>(null)
+  const [dragId, setDragId] = useState<number | null>(null)
+  const [dragOverDay, setDragOverDay] = useState<number | null>(null)
   const [tooltip, setTooltip] = useState<{
-    dayIdx: number
-    x: number
-    y: number
-    containerWidth: number
+    dayIdx: number; x: number; y: number; containerWidth: number
   } | null>(null)
   const chartRef = useRef<HTMLDivElement>(null)
 
+  const [plannedDates, setPlannedDatesState] = useState<Record<number, string>>({})
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('29-planned-dates')
+      if (raw) setPlannedDatesState(JSON.parse(raw))
+    } catch {}
+  }, [])
+
+  function setPlannedDate(id: number, dateStr: string | null) {
+    setPlannedDatesState((prev) => {
+      const next = { ...prev }
+      if (dateStr === null) delete next[id]
+      else next[id] = dateStr
+      try { localStorage.setItem('29-planned-dates', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function effectiveDate(a: CanvasAssignment): Date {
+    const planned = plannedDates[a.id]
+    if (planned) {
+      const p = parseDateStr(planned)
+      if (p <= new Date(a.due_at!)) return p
+    }
+    return new Date(a.due_at!)
+  }
+
+  // Calendar view passes drops back through onMove with a __dropDate sentinel.
+  function handleCalendarMove(a: CanvasAssignment & { __dropDate?: string }) {
+    if (a.__dropDate) {
+      setPlannedDate(a.id, a.__dropDate)
+    } else {
+      setMovingAssignment(a)
+    }
+  }
+
   function chooseWeek(i: number) {
-    setSelectedWeekIdx((prev) => selectWeek(prev, i))
-    setRescheduleLoading(false)
+    setSelectedWeekIdx((prev) => (prev === i ? null : i))
     setTooltip(null)
   }
 
@@ -101,8 +474,8 @@ export default function CalendarHeatmap({ assignments }: Props) {
       const weekEnd = addDays(cur, 6)
       weekEnd.setHours(23, 59, 59, 999)
       const weekAssignments = assignments.filter((a) => {
-        const due = new Date(a.due_at!)
-        return due >= cur && due <= weekEnd
+        const eff = effectiveDate(a)
+        return eff >= cur && eff <= weekEnd
       })
       const score = weekAssignments.reduce((sum, a) => sum + getAssignmentScore(a.name), 0)
       result.push({
@@ -115,27 +488,26 @@ export default function CalendarHeatmap({ assignments }: Props) {
       cur = addDays(cur, 7)
     }
     return result
-  }, [assignments])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignments, plannedDates])
 
   const dailyData = useMemo(() => {
     const todayMs = (() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime() })()
-    const start = selectedWeekIdx !== null && weeks[selectedWeekIdx]
-      ? new Date(weeks[selectedWeekIdx].start)
-      : new Date(todayMs)
+    const start = new Date(todayMs)
     return Array.from({ length: CHART_DAYS }, (_, i) => {
       const dayStart = addDays(start, i)
       dayStart.setHours(0, 0, 0, 0)
       const dayEnd = new Date(dayStart)
       dayEnd.setHours(23, 59, 59, 999)
       const dayAssignments = assignments.filter((a) => {
-        const due = new Date(a.due_at!)
-        return due >= dayStart && due <= dayEnd
+        const eff = effectiveDate(a)
+        return eff >= dayStart && eff <= dayEnd
       })
       const score = dayAssignments.reduce((sum, a) => sum + getAssignmentScore(a.name), 0)
-      const isToday = dayStart.getTime() === todayMs
-      return { date: dayStart, score, dayAssignments, isToday }
+      return { date: dayStart, score, dayAssignments, isToday: dayStart.getTime() === todayMs }
     })
-  }, [assignments, selectedWeekIdx, weeks])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignments, plannedDates])
 
   const maxDailyScore = useMemo(
     () => Math.max(...dailyData.map((d) => d.score), 1),
@@ -146,269 +518,358 @@ export default function CalendarHeatmap({ assignments }: Props) {
     const week = selectedWeekIdx !== null ? weeks[selectedWeekIdx] : null
     if (!week) return []
     return [...week.assignments].sort(
-      (a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime()
+      (a, b) => effectiveDate(a).getTime() - effectiveDate(b).getTime()
     )
-  }, [weeks, selectedWeekIdx])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weeks, selectedWeekIdx, plannedDates])
 
-  async function handleReschedule() {
-    if (selectedWeekIdx === null) return
-    setRescheduleLoading(true)
+  const dayGroups = useMemo(() => {
+    if (selectedWeekIdx === null) return []
     const week = weeks[selectedWeekIdx]
-    const idx = selectedWeekIdx
-    try {
-      const res = await fetch('/api/reschedule', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          week: week.label,
-          score: week.score,
-          assignments: week.assignments.map((a) => ({
-            name: a.name,
-            due_at: a.due_at,
-            courseCode: a.courseCode,
-          })),
+    return Array.from({ length: 7 }, (_, i) => {
+      const dayStart = addDays(week.start, i)
+      dayStart.setHours(0, 0, 0, 0)
+      const dayEnd = new Date(dayStart)
+      dayEnd.setHours(23, 59, 59, 999)
+      return {
+        date: new Date(dayStart),
+        items: displayed.filter((a) => {
+          const eff = effectiveDate(a)
+          return eff >= dayStart && eff <= dayEnd
         }),
-      })
-      if (res.ok) setRequestedWeeks((prev) => new Set(prev).add(idx))
-    } catch {
-      // Network error — let the user try again
-    } finally {
-      setRescheduleLoading(false)
-    }
+      }
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayed, weeks, selectedWeekIdx, plannedDates])
+
+  function handleDrop(dayDate: Date, id: number) {
+    const a = assignments.find((x) => x.id === id)
+    if (!a) return
+    const target = new Date(dayDate)
+    target.setHours(12, 0, 0, 0)
+    if (target > new Date(a.due_at!)) return
+    setPlannedDate(id, toDateStr(dayDate))
   }
 
+  const isDragging = dragId !== null
   const ticks = yTicks(maxDailyScore)
 
+  function typeBadge(type: ReturnType<typeof getAssignmentType>) {
+    if (type === 'ma') return 'bg-red-100 text-red-600'
+    if (type === 'qa') return 'bg-amber-100 text-amber-700'
+    if (type === 'hw') return 'bg-blue-100 text-blue-600'
+    return 'bg-gray-100 text-gray-500'
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      {/* 8-week heatmap grid */}
-      <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
-        {weeks.map((week, i) => {
-          const isRed = week.score >= 30
-          const isSelected = selectedWeekIdx === i
-          return (
-            <button
-              key={i}
-              onClick={() => chooseWeek(i)}
-              className={`flex flex-col gap-1 border p-2 text-left transition-all ${
-                isRed
-                  ? 'bg-red-50 border-red-300 text-red-700'
-                  : 'bg-white border-gray-200 text-gray-700 hover:border-gray-400'
-              } ${isSelected ? 'ring-2 ring-gray-900 ring-offset-1' : ''}`}
-            >
-              <span className="text-[9px] leading-tight text-gray-400 break-words">
-                {fmt(week.start)}–{fmt(week.end)}
-              </span>
-              <span className={`text-lg font-light leading-none ${isRed ? 'text-red-600' : 'text-gray-900'}`}>
-                {week.score}
-              </span>
-            </button>
-          )
-        })}
+    <>
+      {/* Tab switcher */}
+      <div className="flex gap-5 border-b border-gray-200 mb-6">
+        {(['overview', 'calendar'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`pb-2.5 text-xs font-light capitalize border-b-2 transition-colors -mb-px ${
+              activeTab === tab
+                ? 'border-gray-900 text-gray-900'
+                : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
       </div>
 
-      {/* 7-day bar chart */}
-      <div ref={chartRef} className="relative w-full" style={{ aspectRatio: '2 / 1' }}>
-        <svg viewBox={`0 0 ${VW} ${VH}`} width="100%" height="100%">
-          {/* Y-axis gridlines + labels */}
-          {ticks.map((tick) => {
-            const y = B - (tick / maxDailyScore) * PH
-            return (
-              <g key={tick}>
-                <line
-                  x1={L} y1={y} x2={R} y2={y}
-                  stroke={tick === 0 ? '#d1d5db' : '#f3f4f6'}
-                  strokeWidth={tick === 0 ? 1 : 0.75}
-                />
-                <text
-                  x={L - 8} y={y + 4}
-                  textAnchor="end"
-                  fontSize={20}
-                  fill="#9ca3af"
-                  fontFamily="inherit"
+      {/* ── Overview tab ── */}
+      {activeTab === 'overview' && (
+        <div className="flex flex-col gap-6">
+          {/* 8-week heatmap */}
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
+            {weeks.map((week, i) => {
+              const isRed = week.score >= 30
+              const isSelected = selectedWeekIdx === i
+              return (
+                <button
+                  key={i}
+                  onClick={() => chooseWeek(i)}
+                  className={`flex flex-col gap-1 border p-2 text-left transition-all ${
+                    isRed
+                      ? 'bg-red-50 border-red-300 text-red-700'
+                      : 'bg-white border-gray-200 text-gray-700 hover:border-gray-400'
+                  } ${isSelected ? 'ring-2 ring-gray-900 ring-offset-1' : ''}`}
                 >
-                  {tick}
-                </text>
-              </g>
-            )
-          })}
-
-          {/* Y-axis line */}
-          <line x1={L} y1={T} x2={L} y2={B} stroke="#e5e7eb" strokeWidth={0.75} />
-
-          {/* Bars + x-axis labels + hover zones */}
-          {dailyData.map(({ score, date, isToday }, i) => {
-            const barH = score > 0 ? Math.max(3, (score / maxDailyScore) * PH) : 0
-            const cx = L + (i + 0.5) * SLOT
-            const bx = cx - BAR_W / 2
-            const by = B - barH
-            const label = isToday
-              ? 'Today'
-              : date.toLocaleDateString('en-US', { weekday: 'short' })
-            const isHovered = tooltip?.dayIdx === i
-            return (
-              <g
-                key={i}
-                onMouseMove={(e) => {
-                  const rect = chartRef.current?.getBoundingClientRect()
-                  if (!rect) return
-                  setTooltip({
-                    dayIdx: i,
-                    x: e.clientX - rect.left,
-                    y: e.clientY - rect.top,
-                    containerWidth: rect.width,
-                  })
-                }}
-                onMouseLeave={() => setTooltip(null)}
-                style={{ cursor: 'default' }}
-              >
-                {/* transparent full-column hit area */}
-                <rect x={L + i * SLOT} y={T} width={SLOT} height={PH + 10} fill="transparent" />
-                {barH > 0 && (
-                  <rect
-                    x={bx} y={by} width={BAR_W} height={barH}
-                    rx={4} ry={4}
-                    fill={isHovered ? '#374151' : isToday ? '#6b7280' : '#9ca3af'}
-                    style={{ transition: 'fill 120ms ease' }}
-                  />
-                )}
-                <line x1={cx} y1={B} x2={cx} y2={B + 6} stroke="#d1d5db" strokeWidth={0.75} />
-                <text
-                  x={cx} y={B + 28}
-                  textAnchor="middle"
-                  fontSize={20}
-                  fill={isToday ? '#6b7280' : '#9ca3af'}
-                  fontFamily="inherit"
-                >
-                  {label}
-                </text>
-              </g>
-            )
-          })}
-        </svg>
-
-        {/* Hover tooltip */}
-        {tooltip !== null && (() => {
-          const day = dailyData[tooltip.dayIdx]
-          const TOOLTIP_W = 224
-          const rawLeft = tooltip.dayIdx < 4
-            ? tooltip.x + 14
-            : tooltip.x - 14 - TOOLTIP_W
-          const leftPos = Math.max(4, Math.min(rawLeft, tooltip.containerWidth - TOOLTIP_W - 4))
-          const topPos = Math.max(4, tooltip.y - 16)
-          return (
-            <div
-              className="absolute z-50 bg-white border border-gray-200 shadow-lg pointer-events-none"
-              style={{ left: leftPos, top: topPos, width: TOOLTIP_W }}
-            >
-              <div className="px-3 py-2 border-b border-gray-100">
-                <p className="text-xs font-light text-gray-900">
-                  {day.isToday
-                    ? 'Today'
-                    : day.date.toLocaleDateString('en-US', { weekday: 'long' })}
-                </p>
-                <p className="text-[11px] text-gray-400">
-                  {day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </p>
-              </div>
-              <ul className="flex flex-col divide-y divide-gray-50">
-                {day.dayAssignments.length === 0 ? (
-                  <li className="px-3 py-2 text-xs text-gray-400">Nothing due</li>
-                ) : (
-                  day.dayAssignments.map((a) => {
-                    const type = getAssignmentType(a.name)
-                    return (
-                      <li key={a.id} className="px-3 py-2 flex flex-col gap-0.5">
-                        <span className="text-xs font-light text-gray-800 leading-snug line-clamp-2">
-                          {a.name}
-                        </span>
-                        <span className="text-[11px] text-gray-400">
-                          {a.courseCode}
-                          {type !== 'other' && (
-                            <span className="ml-1.5 text-gray-300">· {type}</span>
-                          )}
-                        </span>
-                      </li>
-                    )
-                  })
-                )}
-              </ul>
-            </div>
-          )
-        })()}
-      </div>
-
-      {/* Assignment list for selected week */}
-      {selectedWeekIdx !== null && (
-        <div className="flex flex-col gap-3 border border-gray-200 bg-gray-50 p-5">
-          <div className="flex items-center justify-between border-b border-gray-200 pb-3">
-            <h2 className="text-xs font-light text-gray-900">
-              {weeks[selectedWeekIdx].label}
-            </h2>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-400">
-                {displayed.length} item{displayed.length !== 1 ? 's' : ''}
-              </span>
-              <button
-                onClick={handleReschedule}
-                disabled={rescheduleLoading || requestedWeeks.has(selectedWeekIdx)}
-                className="text-xs font-light text-gray-500 hover:text-gray-900 transition-colors disabled:opacity-50 disabled:cursor-default"
-              >
-                {rescheduleLoading
-                  ? 'Sending…'
-                  : requestedWeeks.has(selectedWeekIdx)
-                  ? 'Requested ✓'
-                  : 'Request Rescheduling'}
-              </button>
-            </div>
+                  <span className="text-[9px] leading-tight text-gray-400 break-words">
+                    {fmt(week.start)}–{fmt(week.end)}
+                  </span>
+                  <span className={`text-lg font-light leading-none ${isRed ? 'text-red-600' : 'text-gray-900'}`}>
+                    {week.score}
+                  </span>
+                </button>
+              )
+            })}
           </div>
-          {displayed.length === 0 ? (
-            <p className="text-sm text-gray-400">Nothing due this week.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {displayed.map((a) => {
-                const type = getAssignmentType(a.name)
-                const score = getAssignmentScore(a.name)
+
+          {/* 30-day bar chart */}
+          <div ref={chartRef} className="relative w-full" style={{ aspectRatio: '2 / 1' }}>
+            <svg viewBox={`0 0 ${VW} ${VH}`} width="100%" height="100%">
+              {ticks.map((tick) => {
+                const y = B - (tick / maxDailyScore) * PH
                 return (
-                  <li key={a.id} className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-light ${
-                        type === 'ma'
-                          ? 'bg-red-100 text-red-600'
-                          : type === 'qa'
-                          ? 'bg-amber-100 text-amber-700'
-                          : type === 'hw'
-                          ? 'bg-blue-100 text-blue-600'
-                          : 'bg-gray-100 text-gray-500'
-                      }`}
-                    >
-                      {type === 'other' ? '–' : type}
-                    </span>
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <a
-                        href={safeHref(a.html_url)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="truncate text-sm font-light text-gray-800 hover:text-black hover:underline"
-                      >
-                        {a.name}
-                      </a>
-                      <span className="text-xs text-gray-400">
-                        {a.courseCode} · Due {new Date(a.due_at!).toLocaleDateString('en-US', {
-                          weekday: 'short', month: 'short', day: 'numeric',
-                        })}
-                      </span>
-                    </div>
-                    {score > 0 && (
-                      <span className="shrink-0 text-xs text-gray-400">+{score}</span>
-                    )}
-                  </li>
+                  <g key={tick}>
+                    <line x1={L} y1={y} x2={R} y2={y}
+                      stroke={tick === 0 ? '#d1d5db' : '#f3f4f6'}
+                      strokeWidth={tick === 0 ? 1 : 0.75}
+                    />
+                    <text x={L - 8} y={y + 4} textAnchor="end" fontSize={20} fill="#9ca3af" fontFamily="inherit">
+                      {tick}
+                    </text>
+                  </g>
                 )
               })}
-            </ul>
+              <line x1={L} y1={T} x2={L} y2={B} stroke="#e5e7eb" strokeWidth={0.75} />
+              {dailyData.map(({ score, date, isToday }, i) => {
+                const barH = score > 0 ? Math.max(2, (score / maxDailyScore) * PH) : 0
+                const cx = L + (i + 0.5) * SLOT
+                const bx = cx - BAR_W / 2
+                const by = B - barH
+                const showLabel = i === 0 || i % 7 === 0
+                const label = isToday ? 'Today' : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                const isHovered = tooltip?.dayIdx === i
+                return (
+                  <g key={i}
+                    onMouseMove={(e) => {
+                      const rect = chartRef.current?.getBoundingClientRect()
+                      if (!rect) return
+                      setTooltip({ dayIdx: i, x: e.clientX - rect.left, y: e.clientY - rect.top, containerWidth: rect.width })
+                    }}
+                    onMouseLeave={() => setTooltip(null)}
+                    style={{ cursor: 'default' }}
+                  >
+                    <rect x={L + i * SLOT} y={T} width={SLOT} height={PH + 10} fill="transparent" />
+                    {barH > 0 && (
+                      <rect x={bx} y={by} width={BAR_W} height={barH} rx={2} ry={2}
+                        fill={isHovered ? '#374151' : isToday ? '#6b7280' : '#9ca3af'}
+                        style={{ transition: 'fill 120ms ease' }}
+                      />
+                    )}
+                    {showLabel && (
+                      <>
+                        <line x1={cx} y1={B} x2={cx} y2={B + 6} stroke="#d1d5db" strokeWidth={0.75} />
+                        <text x={cx} y={B + 28} textAnchor="middle" fontSize={18}
+                          fill={isToday ? '#6b7280' : '#9ca3af'} fontFamily="inherit">
+                          {label}
+                        </text>
+                      </>
+                    )}
+                  </g>
+                )
+              })}
+            </svg>
+
+            {tooltip !== null && (() => {
+              const day = dailyData[tooltip.dayIdx]
+              const TW = 224
+              const rawLeft = tooltip.dayIdx < 15 ? tooltip.x + 14 : tooltip.x - 14 - TW
+              const leftPos = Math.max(4, Math.min(rawLeft, tooltip.containerWidth - TW - 4))
+              return (
+                <div className="absolute z-50 bg-white border border-gray-200 shadow-lg pointer-events-none"
+                  style={{ left: leftPos, top: Math.max(4, tooltip.y - 16), width: TW }}>
+                  <div className="px-3 py-2 border-b border-gray-100">
+                    <p className="text-xs font-light text-gray-900">
+                      {day.isToday ? 'Today' : day.date.toLocaleDateString('en-US', { weekday: 'long' })}
+                    </p>
+                    <p className="text-[11px] text-gray-400">
+                      {day.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <ul className="flex flex-col divide-y divide-gray-50">
+                    {day.dayAssignments.length === 0 ? (
+                      <li className="px-3 py-2 text-xs text-gray-400">Nothing planned</li>
+                    ) : (
+                      day.dayAssignments.map((a) => {
+                        const type = getAssignmentType(a.name)
+                        return (
+                          <li key={a.id} className="px-3 py-2 flex flex-col gap-0.5">
+                            <span className="text-xs font-light text-gray-800 leading-snug line-clamp-2">{a.name}</span>
+                            <span className="text-[11px] text-gray-400">
+                              {a.courseCode}
+                              {type !== 'other' && <span className="ml-1.5 text-gray-300">· {type}</span>}
+                            </span>
+                          </li>
+                        )
+                      })
+                    )}
+                  </ul>
+                </div>
+              )
+            })()}
+          </div>
+
+          {/* Weekly day-grouped drag board */}
+          {selectedWeekIdx !== null && (
+            <div className="flex flex-col gap-3 border border-gray-200 bg-gray-50 p-5">
+              <div className="flex items-center justify-between border-b border-gray-200 pb-3">
+                <h2 className="text-xs font-light text-gray-900">{weeks[selectedWeekIdx].label}</h2>
+                <span className="text-xs text-gray-400">
+                  {displayed.length} item{displayed.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              {displayed.length === 0 ? (
+                <p className="text-sm text-gray-400">Nothing planned this week.</p>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  {dayGroups.map((group, dayIdx) => {
+                    const hasItems = group.items.length > 0
+                    if (!hasItems && !isDragging) return null
+                    const isOver = dragOverDay === dayIdx
+                    return (
+                      <div
+                        key={dayIdx}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverDay(dayIdx) }}
+                        onDragLeave={(e) => {
+                          const rel = e.relatedTarget as Node | null
+                          if (!rel || !e.currentTarget.contains(rel)) setDragOverDay(null)
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault()
+                          handleDrop(group.date, Number(e.dataTransfer.getData('text/plain')))
+                          setDragOverDay(null)
+                        }}
+                        className={`rounded transition-colors duration-100 ${isOver ? 'bg-blue-50 ring-1 ring-inset ring-blue-200' : ''}`}
+                      >
+                        <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1.5 px-1">
+                          {group.date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+                        </p>
+                        {!hasItems ? (
+                          <div className={`h-10 border border-dashed flex items-center justify-center text-[11px] transition-colors ${
+                            isOver ? 'border-blue-300 text-blue-400' : 'border-gray-200 text-gray-300'
+                          }`}>
+                            Drop here
+                          </div>
+                        ) : (
+                          <ul className="flex flex-col gap-1.5">
+                            {group.items.map((a) => {
+                              const type = getAssignmentType(a.name)
+                              const score = getAssignmentScore(a.name)
+                              const isShifted = !!plannedDates[a.id]
+                              const actualDue = new Date(a.due_at!)
+                              return (
+                                <li
+                                  key={a.id}
+                                  draggable
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData('text/plain', String(a.id))
+                                    e.dataTransfer.effectAllowed = 'move'
+                                    setDragId(a.id)
+                                  }}
+                                  onDragEnd={() => { setDragId(null); setDragOverDay(null) }}
+                                  className={`flex items-center gap-2 bg-white border border-gray-200 px-3 py-2 select-none transition-opacity ${
+                                    dragId === a.id ? 'opacity-40' : ''
+                                  }`}
+                                >
+                                  <span className="text-gray-300 cursor-grab active:cursor-grabbing shrink-0 text-base leading-none" aria-hidden>⠿</span>
+                                  <span className={`shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-light ${typeBadge(type)}`}>
+                                    {type === 'other' ? '–' : type}
+                                  </span>
+                                  <div className="flex flex-col min-w-0 flex-1">
+                                    <span className="truncate text-sm font-light text-gray-800">{a.name}</span>
+                                    <span className="text-xs text-gray-400">
+                                      {a.courseCode}
+                                      {isShifted && (
+                                        <span className="ml-2 text-gray-300">
+                                          Due {actualDue.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {score > 0 && <span className="text-xs text-gray-400">+{score}</span>}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setMovingAssignment(a) }}
+                                      className="text-gray-300 hover:text-gray-600 transition-colors"
+                                      title="Move to another date"
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                        <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                                        <line x1="16" x2="16" y1="2" y2="6"/>
+                                        <line x1="8" x2="8" y1="2" y2="6"/>
+                                        <line x1="3" x2="21" y1="10" y2="10"/>
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); setSubmittingAssignment(a) }}
+                                      className="text-gray-300 hover:text-gray-600 transition-colors"
+                                      title="Submit to Canvas"
+                                    >
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" x2="12" y1="3" y2="15"/>
+                                      </svg>
+                                    </button>
+                                  </div>
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           )}
+
+          {/* Scoring legend */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] text-gray-400">
+            <span className="font-medium text-gray-500">Scoring:</span>
+            <span className="inline-flex rounded-sm px-1.5 py-0.5 text-[10px] font-light bg-red-100 text-red-600">MA · 10</span>
+            <span className="inline-flex rounded-sm px-1.5 py-0.5 text-[10px] font-light bg-amber-100 text-amber-700">QA · 5</span>
+            <span className="inline-flex rounded-sm px-1.5 py-0.5 text-[10px] font-light bg-blue-100 text-blue-600">HW · 1</span>
+            <span className="inline-flex rounded-sm px-1.5 py-0.5 text-[10px] font-light bg-gray-100 text-gray-500">Other · 0</span>
+            <span className="ml-auto">Weeks with score ≥ 30 are flagged red.</span>
+          </div>
         </div>
       )}
-    </div>
+
+      {/* ── Calendar tab ── */}
+      {activeTab === 'calendar' && (
+        <MonthCalendar
+          assignments={assignments}
+          plannedDates={plannedDates}
+          onMove={handleCalendarMove}
+          onDetail={(a) => setDetailAssignment(a)}
+        />
+      )}
+
+      {submittingAssignment && (
+        <SubmitModal
+          assignment={submittingAssignment}
+          onClose={() => setSubmittingAssignment(null)}
+        />
+      )}
+
+      {movingAssignment && (
+        <MoveDatePopup
+          assignment={movingAssignment}
+          currentDateStr={plannedDates[movingAssignment.id]}
+          onSelect={(dateStr) => {
+            setPlannedDate(movingAssignment.id, dateStr)
+            setMovingAssignment(null)
+          }}
+          onClose={() => setMovingAssignment(null)}
+        />
+      )}
+
+      {detailAssignment && (
+        <AssignmentDetail
+          assignment={detailAssignment}
+          plannedDate={plannedDates[detailAssignment.id]}
+          onMove={() => { setMovingAssignment(detailAssignment); setDetailAssignment(null) }}
+          onClose={() => setDetailAssignment(null)}
+        />
+      )}
+    </>
   )
 }

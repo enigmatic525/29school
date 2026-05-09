@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 const TABS = [
-  { label: 'Workload', href: '/dashboard' },
+  { label: 'Dashboard', href: '/dashboard' },
   { label: 'Feedback', href: '/feedback' },
   { label: 'Study Guides', href: '/study-guides' },
   { label: 'Notice Board', href: '/notice-board' },
