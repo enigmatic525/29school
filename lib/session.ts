@@ -1,3 +1,4 @@
+import 'server-only'
 import { getIronSession, type IronSession } from 'iron-session'
 import { cookies } from 'next/headers'
 
@@ -8,6 +9,9 @@ export interface SessionData {
   // session but no Canvas access — they can use feedback, study guides,
   // and the notice board, but the workload dashboard is unavailable.
   guest?: boolean
+  // Stable Canvas user id captured at login. Needed so the notification
+  // settings can key prefs by a stable identifier (the token rotates).
+  canvasUserId?: number
 }
 
 const password = process.env.SESSION_SECRET

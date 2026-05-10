@@ -12,7 +12,7 @@ export default async function StudyGuidesPage() {
   return (
     <>
       <h1 className="mb-1 text-xl font-light">Study Guides</h1>
-      <p className="mb-8 text-xs text-gray-400">Resources by course.</p>
+      <p className="mb-8 text-xs text-gray-400 dark:text-gray-500">Resources by course.</p>
       <StudyGuides />
     </>
   )

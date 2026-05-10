@@ -27,7 +27,7 @@ export async function DELETE(
   const { error } = await supabase.from('study_guides').delete().eq('id', id)
 
   if (error) {
-    console.error('study-guides DELETE error', error)
+    console.error('study-guides DELETE error:', error.message)
     return NextResponse.json({ error: 'Could not delete' }, { status: 500 })
   }
 

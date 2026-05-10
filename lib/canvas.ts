@@ -1,3 +1,6 @@
+import 'server-only'
+import { sanitizeHtml } from './security'
+
 export interface CanvasCourse {
   id: number
   name: string
@@ -30,7 +33,7 @@ export async function fetchProfile(token: string) {
     headers: headers(token),
   })
   if (!res.ok) throw new Error('Invalid token')
-  return res.json() as Promise<{ name: string; primary_email: string }>
+  return res.json() as Promise<{ id: number; name: string; primary_email: string }>
 }
 
 export async function fetchCourses(token: string): Promise<CanvasCourse[]> {
@@ -52,7 +55,12 @@ export async function fetchAssignments(token: string, courseId: number): Promise
   if (!res.ok) return []
   const data = await res.json()
   if (!Array.isArray(data)) return []
-  return data
+  // Sanitise teacher-authored description HTML at the data boundary so every
+  // downstream renderer gets safe content.
+  return data.map((a: CanvasAssignment) => ({
+    ...a,
+    description: typeof a.description === 'string' ? sanitizeHtml(a.description) : a.description ?? null,
+  }))
 }
 
 export async function fetchAllAssignments(token: string) {
@@ -176,6 +184,23 @@ export function getAssignmentScore(name: string): number {
   }
 }
 
+export interface SubmissionComment {
+  id: number | string
+  author: string
+  text: string
+  createdAt: string | null
+}
+
+export interface RubricCriterionResult {
+  id: string
+  description: string | null
+  longDescription: string | null
+  points: number | null
+  maxPoints: number | null
+  ratingDescription: string | null
+  comment: string | null
+}
+
 export interface GradedSubmission {
   id: number
   assignmentName: string
@@ -184,6 +209,9 @@ export interface GradedSubmission {
   grade: string | null
   pointsPossible: number | null
   gradedAt: string
+  htmlUrl: string | null
+  comments: SubmissionComment[]
+  rubric: RubricCriterionResult[]
 }
 
 export async function fetchRecentSubmissions(token: string, courses: CanvasCourse[]): Promise<GradedSubmission[]> {
@@ -194,7 +222,7 @@ export async function fetchRecentSubmissions(token: string, courses: CanvasCours
     courses.map(async (course) => {
       try {
         const res = await fetch(
-          `https://${DOMAIN}/api/v1/courses/${course.id}/students/submissions?student_ids[]=self&include[]=assignment&per_page=50`,
+          `https://${DOMAIN}/api/v1/courses/${course.id}/students/submissions?student_ids[]=self&include[]=assignment&include[]=submission_comments&include[]=rubric_assessment&per_page=50`,
           { headers: headers(token) }
         )
         if (!res.ok) return []
@@ -211,6 +239,48 @@ export async function fetchRecentSubmissions(token: string, courses: CanvasCours
           const a = s.assignment as Record<string, unknown> | undefined
           const score = typeof s.score === 'number' ? s.score : null
           const pp = typeof a?.points_possible === 'number' ? a.points_possible : null
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rawComments = Array.isArray(s.submission_comments) ? s.submission_comments as any[] : []
+          const comments: SubmissionComment[] = rawComments
+            .filter((c) => typeof c?.comment === 'string' && c.comment.trim() !== '')
+            .map((c) => ({
+              id: (c.id as number | string) ?? `${s.id}-${c.created_at ?? ''}`,
+              author: typeof c.author_name === 'string' && c.author_name
+                ? c.author_name
+                : 'Teacher',
+              text: c.comment as string,
+              createdAt: typeof c.created_at === 'string' ? c.created_at : null,
+            }))
+
+          // Rubric: assignment.rubric provides definitions; submission.rubric_assessment provides scores
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const rubricDefs = Array.isArray((a as any)?.rubric) ? ((a as any).rubric as any[]) : []
+          const rubricAssessment = (s.rubric_assessment ?? null) as Record<string, {
+            points?: number
+            comments?: string
+            rating_id?: string
+          }> | null
+          const rubric: RubricCriterionResult[] = rubricAssessment
+            ? Object.entries(rubricAssessment).map(([critId, val]) => {
+                const def = rubricDefs.find((d) => d?.id === critId)
+                let ratingDescription: string | null = null
+                if (def && Array.isArray(def.ratings) && val.rating_id) {
+                  const r = def.ratings.find((r: { id?: string }) => r?.id === val.rating_id)
+                  if (r && typeof r.description === 'string') ratingDescription = r.description
+                }
+                return {
+                  id: critId,
+                  description: typeof def?.description === 'string' ? def.description : null,
+                  longDescription: typeof def?.long_description === 'string' ? def.long_description : null,
+                  points: typeof val.points === 'number' ? val.points : null,
+                  maxPoints: typeof def?.points === 'number' ? def.points : null,
+                  ratingDescription,
+                  comment: typeof val.comments === 'string' && val.comments.trim() ? val.comments : null,
+                }
+              })
+            : []
+
           return {
             id: s.id as number,
             assignmentName: (a?.name as string) ?? 'Unknown Assignment',
@@ -219,6 +289,13 @@ export async function fetchRecentSubmissions(token: string, courses: CanvasCours
             grade: typeof s.grade === 'string' ? s.grade : null,
             pointsPossible: pp,
             gradedAt: s.graded_at as string,
+            htmlUrl: typeof s.preview_url === 'string'
+              ? s.preview_url
+              : (typeof (a as { html_url?: unknown })?.html_url === 'string'
+                ? (a as { html_url: string }).html_url
+                : null),
+            comments,
+            rubric,
           } satisfies GradedSubmission
         })
       } catch {

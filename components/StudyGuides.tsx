@@ -141,12 +141,12 @@ function AddModal({
 
   return (
     <>
-      <div className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 z-30 bg-black/30 dark:bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div className="fixed inset-0 z-40 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="add-resource-title">
-        <div className="w-full max-w-md border border-gray-200 bg-white p-6 shadow-xl">
+        <div className="w-full max-w-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-6 shadow-xl">
           <div className="flex items-center justify-between mb-5">
-            <h2 id="add-resource-title" className="text-xs font-light text-gray-900">Add Resource</h2>
-            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 transition-colors" aria-label="Close">
+            <h2 id="add-resource-title" className="text-xs font-light text-gray-900 dark:text-gray-100">Add Resource</h2>
+            <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 transition-colors" aria-label="Close">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>
@@ -155,12 +155,12 @@ function AddModal({
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="resource-class" className="text-xs font-light text-gray-500">Class</label>
+              <label htmlFor="resource-class" className="text-xs font-light text-gray-500 dark:text-gray-400">Class</label>
               <select
                 id="resource-class"
                 value={classId}
                 onChange={(e) => setClassId(e.target.value === 'new' ? 'new' : Number(e.target.value))}
-                className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-900 transition-colors"
+                className="rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-gray-900 dark:focus:border-gray-400 transition-colors"
               >
                 {classes.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
@@ -174,13 +174,13 @@ function AddModal({
                   onChange={(e) => setNewClassName(e.target.value)}
                   placeholder="e.g. Pre-Calculus"
                   maxLength={100}
-                  className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors"
+                  className="rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-900 dark:focus:border-gray-400 transition-colors"
                 />
               )}
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="resource-title" className="text-xs font-light text-gray-500">Title</label>
+              <label htmlFor="resource-title" className="text-xs font-light text-gray-500 dark:text-gray-400">Title</label>
               <input
                 id="resource-title"
                 value={title}
@@ -188,12 +188,12 @@ function AddModal({
                 placeholder="e.g. Unit 7 Study Guide"
                 required
                 maxLength={200}
-                className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors"
+                className="rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-900 dark:focus:border-gray-400 transition-colors"
               />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="resource-url" className="text-xs font-light text-gray-500">URL</label>
+              <label htmlFor="resource-url" className="text-xs font-light text-gray-500 dark:text-gray-400">URL</label>
               <input
                 id="resource-url"
                 value={url}
@@ -202,7 +202,7 @@ function AddModal({
                 type="url"
                 required
                 maxLength={2048}
-                className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors"
+                className="rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-900 dark:focus:border-gray-400 transition-colors"
               />
             </div>
 
@@ -211,7 +211,7 @@ function AddModal({
             <button
               type="submit"
               disabled={submitting || !title.trim()}
-              className="rounded-none bg-gray-900 py-2.5 text-xs font-light text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="rounded-none bg-gray-900 dark:bg-gray-100 py-2.5 text-xs font-light text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               {submitting ? 'Adding…' : 'Add Resource'}
             </button>
@@ -276,23 +276,23 @@ export default function StudyGuides() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
           {hydrated ? `${total} resource${total === 1 ? '' : 's'}` : '…'}
         </p>
         <button
           onClick={() => setModalOpen(true)}
-          className="rounded-none bg-gray-900 px-4 py-2 text-xs font-light text-white hover:bg-gray-700 transition-colors"
+          className="rounded-none bg-gray-900 dark:bg-gray-100 px-4 py-2 text-xs font-light text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors"
         >
           + Add Resource
         </button>
       </div>
 
       {groups.length === 0 ? (
-        <div className="border border-dashed border-gray-300 p-10 text-center">
-          <p className="text-sm text-gray-400">No resources yet.</p>
+        <div className="border border-dashed border-gray-300 dark:border-gray-700 p-10 text-center">
+          <p className="text-sm text-gray-400 dark:text-gray-500">No resources yet.</p>
           <button
             onClick={() => setModalOpen(true)}
-            className="mt-3 text-xs text-gray-400 hover:text-gray-700 transition-colors"
+            className="mt-3 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
           >
             Be the first to add one →
           </button>
@@ -302,9 +302,9 @@ export default function StudyGuides() {
           {groups.map((group) => (
             <section key={group.id}>
               <div className="flex items-center gap-3 mb-3">
-                <div className="h-px flex-1 bg-gray-200" />
-                <h2 className="text-xs font-light text-gray-500 shrink-0">{group.name}</h2>
-                <div className="h-px flex-1 bg-gray-200" />
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+                <h2 className="text-xs font-light text-gray-500 dark:text-gray-400 shrink-0">{group.name}</h2>
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
               </div>
               <ul className="flex flex-col gap-1.5">
                 {group.guides.map((guide) => (
@@ -313,18 +313,18 @@ export default function StudyGuides() {
                       href={safeHref(guide.url)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex flex-1 items-center gap-3 border border-gray-200 bg-white px-4 py-3 hover:bg-gray-50 transition-colors group border-r-0"
+                      className="flex flex-1 items-center gap-3 border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors group border-r-0"
                     >
-                      <span className="text-gray-400 shrink-0" aria-hidden="true">
+                      <span className="text-gray-400 dark:text-gray-500 shrink-0" aria-hidden="true">
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
                           <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
                         </svg>
                       </span>
-                      <span className="flex-1 text-sm text-gray-800 group-hover:text-black truncate">
+                      <span className="flex-1 text-sm text-gray-800 dark:text-gray-200 group-hover:text-black dark:group-hover:text-white truncate">
                         {guide.title}
                       </span>
-                      <span className="shrink-0 text-[11px] text-gray-400">
+                      <span className="shrink-0 text-[11px] text-gray-400 dark:text-gray-500">
                         {fmt(guide.created_at)}
                       </span>
                     </a>
@@ -332,7 +332,7 @@ export default function StudyGuides() {
                       onClick={() => handleDelete(guide.id)}
                       disabled={deletingId === guide.id}
                       aria-label={`Delete ${guide.title}`}
-                      className="flex items-center justify-center border border-gray-200 bg-white px-3 text-gray-300 hover:text-red-400 hover:bg-red-50 hover:border-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center justify-center border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 text-gray-300 dark:text-gray-600 hover:text-red-400 hover:bg-red-50 hover:border-red-200 dark:hover:bg-red-950/30 dark:hover:border-red-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <polyline points="3 6 5 6 21 6"/>

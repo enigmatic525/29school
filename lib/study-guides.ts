@@ -55,11 +55,11 @@ export async function loadStudyGuides(): Promise<StudyGuidesPayload | { error: s
     return { groups: [], classes: [], schemaMissing: true }
   }
   if (guidesError) {
-    console.error('study-guides load error', guidesError)
+    console.error('study-guides load error:', guidesError.message)
     return { error: 'Could not load study guides' }
   }
   if (classesError) {
-    console.error('study-guides classes error', classesError)
+    console.error('study-guides classes error:', classesError.message)
     return { error: 'Could not load classes' }
   }
 

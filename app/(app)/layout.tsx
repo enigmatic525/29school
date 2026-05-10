@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-white text-gray-900 flex flex-col">
+    <div className="min-h-screen bg-white dark:bg-[var(--background)] text-gray-900 dark:text-gray-100 flex flex-col">
       <AppNav name={displayName} isGuest={isGuest} />
       <main id="main-content" className="mx-auto w-full max-w-5xl flex-1 px-4 sm:px-6 py-8">
         {children}

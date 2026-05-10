@@ -14,28 +14,28 @@ export default function AppError({
   }, [error])
 
   return (
-    <div className="border border-red-200 bg-red-50 p-8 text-center">
-      <p className="text-xs font-light text-red-700 mb-1">Something went wrong</p>
-      <p className="text-sm text-red-600 mb-5">
+    <div className="border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 p-8 text-center">
+      <p className="text-xs font-light text-red-700 dark:text-red-300 mb-1">Something went wrong</p>
+      <p className="text-sm text-red-600 dark:text-red-400 mb-5">
         We couldn&apos;t load this page. This is usually a temporary connection issue with Canvas.
       </p>
       <div className="flex justify-center gap-3">
         <button
           type="button"
           onClick={reset}
-          className="rounded-none bg-gray-900 px-4 py-2 text-xs font-light text-white hover:bg-gray-700 transition-colors"
+          className="rounded-none bg-gray-900 dark:bg-gray-100 px-4 py-2 text-xs font-light text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors"
         >
           Try again
         </button>
         <a
           href="/login?from=settings"
-          className="rounded-none border border-gray-300 px-4 py-2 text-xs font-light text-gray-700 hover:border-gray-500 transition-colors"
+          className="rounded-none border border-gray-300 dark:border-gray-700 px-4 py-2 text-xs font-light text-gray-700 dark:text-gray-300 hover:border-gray-500 dark:hover:border-gray-500 transition-colors"
         >
           Re-enter token
         </a>
       </div>
       {error.digest && (
-        <p className="mt-4 text-[10px] text-red-400 font-mono">ref: {error.digest}</p>
+        <p className="mt-4 text-[10px] text-red-400 dark:text-red-500 font-mono">ref: {error.digest}</p>
       )}
     </div>
   )

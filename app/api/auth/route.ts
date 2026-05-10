@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { fetchProfile } from '@/lib/canvas'
 import { asTrimmedString, getClientIp, isSameOrigin, readJson } from '@/lib/security'
 import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
+import { getPref, refreshStoredToken } from '@/lib/notifications'
 
 // Generic auth error so token-shape mismatches do not give bots a faster signal.
 const AUTH_ERROR = NextResponse.json({ error: 'Invalid token' }, { status: 401 })
@@ -12,11 +13,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Brute-force defense: 8 login attempts per IP per 15 minutes.
+  // Brute-force defense: 8 login attempts per IP per 15 minutes for token
+  // logins, plus a separate 12 / hour cap on guest sign-ins so a flood of
+  // guest hits can't burn other shared limits (feedback, study guides).
   // In dev there is no reverse proxy, so all requests share the same 'unknown'
   // bucket and would trip the limit during normal testing.
+  const ip = getClientIp(request)
   if (process.env.NODE_ENV === 'production') {
-    const ip = getClientIp(request)
     const limit = rateLimit(`auth:${ip}`, 8, 15 * 60 * 1000)
     if (!limit.allowed) return rateLimitResponse(limit)
   }
@@ -26,8 +29,13 @@ export async function POST(request: NextRequest) {
 
   // Guest sign-in: no Canvas token, limited features.
   if (parsed.data.guest === true) {
+    if (process.env.NODE_ENV === 'production') {
+      const guestLimit = rateLimit(`auth-guest:${ip}`, 12, 60 * 60 * 1000)
+      if (!guestLimit.allowed) return rateLimitResponse(guestLimit)
+    }
     const session = await getSession()
     session.canvasToken = undefined
+    session.canvasUserId = undefined
     session.isLoggedIn = true
     session.guest = true
     await session.save()
@@ -44,9 +52,21 @@ export async function POST(request: NextRequest) {
     const profile = await fetchProfile(token)
     const session = await getSession()
     session.canvasToken = token
+    session.canvasUserId = typeof profile.id === 'number' ? profile.id : undefined
     session.isLoggedIn = true
     session.guest = false
     await session.save()
+    // If this Canvas user previously enabled grade alerts, refresh the
+    // encrypted-at-rest token so the cron can keep polling. Skip on any
+    // failure — refresh failure must not block login.
+    if (session.canvasUserId) {
+      try {
+        const existing = await getPref(session.canvasUserId)
+        if (existing) await refreshStoredToken(session.canvasUserId, token)
+      } catch (e) {
+        console.error('refreshStoredToken on login skipped:', (e as Error).message)
+      }
+    }
     return NextResponse.json({ ok: true, name: profile.name })
   } catch {
     return AUTH_ERROR

@@ -18,6 +18,7 @@ type State = 'idle' | 'loading' | 'success' | 'error'
 export default function FeedbackForm() {
   const [category, setCategory] = useState(CATEGORIES[0])
   const [message, setMessage] = useState('')
+  const [website, setWebsite] = useState('') // honeypot: humans never see this
   const [state, setState] = useState<State>('idle')
   const [errorText, setErrorText] = useState('')
 
@@ -29,7 +30,7 @@ export default function FeedbackForm() {
       const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ category, message }),
+        body: JSON.stringify({ category, message, website }),
       })
       if (!res.ok) {
         let msg = 'Something went wrong. Try again.'
@@ -55,10 +56,10 @@ export default function FeedbackForm() {
       <div
         role="status"
         aria-live="polite"
-        className="border border-gray-200 bg-gray-50 p-8 text-center"
+        className="border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-8 text-center"
       >
-        <p className="text-xs font-light text-gray-900 mb-1">Submitted</p>
-        <p className="text-sm text-gray-500">Your response was sent anonymously.</p>
+        <p className="text-xs font-light text-gray-900 dark:text-gray-100 mb-1">Submitted</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Your response was sent anonymously.</p>
         <button
           type="button"
           onClick={() => {
@@ -66,7 +67,7 @@ export default function FeedbackForm() {
             setMessage('')
             setErrorText('')
           }}
-          className="mt-5 text-xs text-gray-400 hover:text-gray-700 transition-colors"
+          className="mt-5 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
         >
           Submit another →
         </button>
@@ -79,20 +80,35 @@ export default function FeedbackForm() {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      <p className="text-xs text-gray-400">
+      {/* Honeypot — hidden from users via inline style + aria-hidden + tab index.
+          Bots that auto-fill every input will trip the server-side check. */}
+      <div aria-hidden="true" style={{ position: 'absolute', left: '-9999px', width: '1px', height: '1px', overflow: 'hidden' }}>
+        <label htmlFor="feedback-website">Website (leave blank)</label>
+        <input
+          id="feedback-website"
+          name="website"
+          type="text"
+          tabIndex={-1}
+          autoComplete="off"
+          value={website}
+          onChange={(e) => setWebsite(e.target.value)}
+        />
+      </div>
+
+      <p className="text-xs text-gray-400 dark:text-gray-500">
         This form will be anonymously sent to me (Adam). I will do my best to take action on the
         comment or question.
       </p>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="feedback-category" className="text-xs font-light text-gray-500">
+        <label htmlFor="feedback-category" className="text-xs font-light text-gray-500 dark:text-gray-400">
           Category
         </label>
         <select
           id="feedback-category"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none focus:border-gray-900 transition-colors"
+          className="rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 outline-none focus:border-gray-900 dark:focus:border-gray-400 transition-colors"
         >
           {CATEGORIES.map((c) => (
             <option key={c}>{c}</option>
@@ -101,7 +117,7 @@ export default function FeedbackForm() {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="feedback-message" className="text-xs font-light text-gray-500">
+        <label htmlFor="feedback-message" className="text-xs font-light text-gray-500 dark:text-gray-400">
           Message
         </label>
         <textarea
@@ -112,9 +128,9 @@ export default function FeedbackForm() {
           required
           rows={6}
           maxLength={MAX_MESSAGE + 100}
-          className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors resize-y"
+          className="rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-900 dark:focus:border-gray-400 transition-colors resize-y"
         />
-        <p className={`text-[11px] text-right ${overLimit ? 'text-red-500' : 'text-gray-300'}`}>
+        <p className={`text-[11px] text-right ${overLimit ? 'text-red-500' : 'text-gray-300 dark:text-gray-600'}`}>
           {overLimit ? `${-remaining} over limit` : `${remaining} characters left`}
         </p>
       </div>
@@ -128,7 +144,7 @@ export default function FeedbackForm() {
       <button
         type="submit"
         disabled={state === 'loading' || !message.trim() || overLimit}
-        className="rounded-none bg-gray-900 py-2.5 text-xs font-light text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="rounded-none bg-gray-900 dark:bg-gray-100 py-2.5 text-xs font-light text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {state === 'loading' ? 'Sending…' : 'Submit Anonymously'}
       </button>

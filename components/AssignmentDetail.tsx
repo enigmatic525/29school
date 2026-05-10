@@ -89,19 +89,19 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4 pb-4 sm:pb-0"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 dark:bg-black/60 px-4 pb-4 sm:pb-0"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-lg bg-white border border-gray-200 shadow-xl flex flex-col max-h-[85vh]">
+      <div className="w-full max-w-lg bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 shadow-xl flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4 shrink-0">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-200 dark:border-gray-800 px-5 py-4 shrink-0">
           <div className="min-w-0">
-            <p className="text-[10px] text-gray-400 mb-1">{assignment.courseCode}</p>
-            <h2 className="text-base font-light text-gray-900 leading-snug">{assignment.name}</h2>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">{assignment.courseCode}</p>
+            <h2 className="text-base font-light text-gray-900 dark:text-gray-100 leading-snug">{assignment.name}</h2>
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 mt-0.5 text-gray-400 hover:text-gray-700 transition-colors"
+            className="shrink-0 mt-0.5 text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 transition-colors"
             aria-label="Close"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -111,28 +111,28 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
         </div>
 
         {/* Due date */}
-        <div className="px-5 py-3 border-b border-gray-100 shrink-0 flex items-center gap-4 text-xs text-gray-500">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
           {planned && isShifted ? (
             <>
               <span>
-                <span className="text-gray-400 mr-1">Planned</span>
+                <span className="text-gray-400 dark:text-gray-500 mr-1">Planned</span>
                 {fmtDate(planned)}
               </span>
-              <span className="text-gray-300">·</span>
+              <span className="text-gray-300 dark:text-gray-700">·</span>
               <span>
-                <span className="text-gray-400 mr-1">Due</span>
+                <span className="text-gray-400 dark:text-gray-500 mr-1">Due</span>
                 {fmtDate(new Date(assignment.due_at!))}
               </span>
             </>
           ) : (
             <span>
-              <span className="text-gray-400 mr-1">Due</span>
+              <span className="text-gray-400 dark:text-gray-500 mr-1">Due</span>
               {fmtDate(new Date(assignment.due_at!))}
             </span>
           )}
           {assignment.points_possible > 0 && (
             <>
-              <span className="text-gray-300">·</span>
+              <span className="text-gray-300 dark:text-gray-700">·</span>
               <span>{assignment.points_possible} pts</span>
             </>
           )}
@@ -141,28 +141,28 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
         {/* Scrollable body: description + submission */}
         <div className="flex-1 overflow-y-auto">
           {/* Description */}
-          <div className="px-5 py-4 border-b border-gray-100">
+          <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
             {assignment.description ? (
               // Content is teacher-authored HTML from the school's Canvas instance.
               <div
-                className="prose-assignment text-sm font-light text-gray-700 leading-relaxed"
+                className="prose-assignment text-sm font-light text-gray-700 dark:text-gray-300 leading-relaxed"
                 dangerouslySetInnerHTML={{ __html: assignment.description }}
               />
             ) : (
-              <p className="text-sm text-gray-400 italic">No description provided.</p>
+              <p className="text-sm text-gray-400 dark:text-gray-500 italic">No description provided.</p>
             )}
           </div>
 
           {/* Submission */}
           <div className="px-5 py-4">
-            <p className="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-3">Submit</p>
+            <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">Submit</p>
 
             {done ? (
-              <p className="text-sm font-light text-gray-500">
+              <p className="text-sm font-light text-gray-500 dark:text-gray-400">
                 Submitted — your work has been sent to Canvas.
               </p>
             ) : !canSubmit ? (
-              <p className="text-sm font-light text-gray-500">
+              <p className="text-sm font-light text-gray-500 dark:text-gray-400">
                 {assignment.is_quiz_assignment
                   ? 'Quizzes must be taken directly on Canvas.'
                   : assignment.submission_types.includes('none') || assignment.submission_types.length === 0
@@ -183,8 +183,8 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
                         onClick={() => setType(t)}
                         className={`px-3 py-1 text-[11px] border transition-colors ${
                           type === t
-                            ? 'border-gray-900 bg-gray-900 text-white'
-                            : 'border-gray-200 text-gray-500 hover:border-gray-400'
+                            ? 'border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-400 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-500'
                         }`}
                       >
                         {typeLabel(t)}
@@ -199,7 +199,7 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
                     onChange={(e) => setText(e.target.value)}
                     placeholder="Write your answer…"
                     rows={5}
-                    className="w-full border border-gray-200 p-3 text-sm font-light text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-500 resize-none"
+                    className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 text-sm font-light text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 resize-none"
                   />
                 )}
 
@@ -209,7 +209,7 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     placeholder="https://…"
-                    className="w-full border border-gray-200 p-3 text-sm font-light text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-500"
+                    className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 text-sm font-light text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500"
                   />
                 )}
 
@@ -223,9 +223,9 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
                     />
                     <button
                       onClick={() => fileInput.current?.click()}
-                      className="w-full border border-dashed border-gray-300 py-6 text-sm font-light text-center transition-colors hover:border-gray-500"
+                      className="w-full border border-dashed border-gray-300 dark:border-gray-700 py-6 text-sm font-light text-center transition-colors hover:border-gray-500 dark:hover:border-gray-500"
                     >
-                      <span className={file ? 'text-gray-900' : 'text-gray-400'}>
+                      <span className={file ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
                         {file ? file.name : 'Click to choose a file'}
                       </span>
                     </button>
@@ -237,7 +237,7 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
                 <button
                   onClick={submit}
                   disabled={loading}
-                  className="self-end bg-gray-900 text-white text-xs font-light px-5 py-2.5 hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="self-end bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-light px-5 py-2.5 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? 'Submitting…' : 'Submit to Canvas'}
                 </button>
@@ -247,18 +247,18 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
         </div>
 
         {/* Footer */}
-        <div className="border-t border-gray-200 px-5 py-3 shrink-0 flex items-center justify-between gap-3">
+        <div className="border-t border-gray-200 dark:border-gray-800 px-5 py-3 shrink-0 flex items-center justify-between gap-3">
           <a
             href={safeHref(assignment.html_url)}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 transition-colors"
+            className="text-xs text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 underline underline-offset-2 transition-colors"
           >
             Open in Canvas
           </a>
           <button
             onClick={onMove}
-            className="border border-gray-200 px-4 py-2 text-xs font-light text-gray-700 hover:border-gray-400 transition-colors"
+            className="border border-gray-200 dark:border-gray-700 px-4 py-2 text-xs font-light text-gray-700 dark:text-gray-300 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
           >
             Move date
           </button>

@@ -5,8 +5,12 @@ import { rateLimit, rateLimitResponse } from '@/lib/rate-limit'
 
 const MAX_BYTES = 10 * 1024 * 1024 // 10 MB
 const ALLOWED_MIME = 'application/pdf'
-// %PDF-1.x — first 4 bytes of any well-formed PDF.
-const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46] // "%PDF"
+// %PDF-1. — well-formed PDFs start with the magic plus a version byte.
+// Requiring the version byte rejects polyglots that splice "%PDF" onto HTML.
+const PDF_HEADER = Buffer.from('%PDF-1.', 'utf8')
+// %%EOF — every conformant PDF ends with this marker (possibly followed by
+// whitespace). Checking the trailer further narrows what passes.
+const PDF_TRAILER = Buffer.from('%%EOF', 'utf8')
 
 export async function POST(request: NextRequest) {
   if (!isSameOrigin(request)) {
@@ -55,13 +59,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'File too large' }, { status: 413 })
   }
   // Magic-number sniff so a renamed exe / html / svg can't pose as a PDF.
-  if (
-    buffer.length < 4 ||
-    buffer[0] !== PDF_MAGIC[0] ||
-    buffer[1] !== PDF_MAGIC[1] ||
-    buffer[2] !== PDF_MAGIC[2] ||
-    buffer[3] !== PDF_MAGIC[3]
-  ) {
+  // Header must be %PDF-1. and the file must contain %%EOF in its tail
+  // window — narrows the polyglot surface a friend might try to upload.
+  if (buffer.length < PDF_HEADER.length + PDF_TRAILER.length) {
+    return NextResponse.json({ error: 'Not a valid PDF' }, { status: 415 })
+  }
+  if (buffer.subarray(0, PDF_HEADER.length).compare(PDF_HEADER) !== 0) {
+    return NextResponse.json({ error: 'Not a valid PDF' }, { status: 415 })
+  }
+  // PDF readers tolerate junk after %%EOF; check the last 1 KB for the trailer.
+  const tail = buffer.subarray(Math.max(0, buffer.length - 1024))
+  if (tail.indexOf(PDF_TRAILER) === -1) {
     return NextResponse.json({ error: 'Not a valid PDF' }, { status: 415 })
   }
 
@@ -79,7 +87,7 @@ export async function POST(request: NextRequest) {
     })
 
   if (error) {
-    console.error('upload error', error)
+    console.error('upload error:', error.message)
     return NextResponse.json({ error: 'Could not upload' }, { status: 500 })
   }
 

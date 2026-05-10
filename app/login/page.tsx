@@ -67,12 +67,12 @@ function LoginContent() {
   }
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center px-4 relative">
+    <div className="min-h-screen bg-white dark:bg-[var(--background)] flex items-center justify-center px-4 relative">
       {fromSettings && (
         <button
           type="button"
           onClick={() => router.back()}
-          className="absolute top-5 left-5 text-gray-400 hover:text-gray-700 transition-colors"
+          className="absolute top-5 left-5 text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 transition-colors"
           aria-label="Cancel"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -86,16 +86,16 @@ function LoginContent() {
         {/* Header */}
         <div className="mb-10 text-center">
           <div className="flex items-center justify-center gap-4 mb-2">
-            <div className="h-px flex-1 bg-gray-300" />
-            <span className="text-3xl font-light text-gray-900">Class of 2029</span>
-            <div className="h-px flex-1 bg-gray-300" />
+            <div className="h-px flex-1 bg-gray-300 dark:bg-gray-700" />
+            <span className="text-3xl font-light text-gray-900 dark:text-gray-100">Class of 2029</span>
+            <div className="h-px flex-1 bg-gray-300 dark:bg-gray-700" />
           </div>
-          <p className="text-xs text-gray-400">eastsideprep.instructure.com</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">eastsideprep.instructure.com</p>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="canvas-token" className="text-xs font-light text-gray-500">
+            <label htmlFor="canvas-token" className="text-xs font-light text-gray-500 dark:text-gray-400">
               Canvas Access Token
             </label>
             <input
@@ -112,7 +112,7 @@ function LoginContent() {
               maxLength={200}
               aria-invalid={error ? true : undefined}
               aria-describedby={error ? 'login-error' : undefined}
-              className="rounded-none border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder-gray-300 outline-none focus:border-gray-900 transition-colors"
+              className="rounded-none border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2.5 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 outline-none focus:border-gray-900 dark:focus:border-gray-400 transition-colors"
             />
           </div>
 
@@ -125,7 +125,7 @@ function LoginContent() {
           <button
             type="submit"
             disabled={loading || !token.trim()}
-            className="rounded-none bg-gray-900 py-2.5 text-xs font-light text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="rounded-none bg-gray-900 dark:bg-gray-100 py-2.5 text-xs font-light text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? 'Connecting…' : 'Connect Canvas'}
           </button>
@@ -135,39 +135,39 @@ function LoginContent() {
           <button
             type="button"
             onClick={() => setConfirmGuestOpen(true)}
-            className="text-xs text-gray-400 hover:text-gray-700 transition-colors underline-offset-4 hover:underline"
+            className="text-xs text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-300 transition-colors underline-offset-4 hover:underline"
           >
             Use without token?
           </button>
         </div>
 
         <details className="mt-8">
-          <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          <summary className="cursor-pointer text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
             How do I get my access token?
           </summary>
-          <ol className="mt-3 flex flex-col gap-1.5 text-xs text-gray-500 list-decimal list-inside leading-relaxed border-l-2 border-gray-200 pl-4">
+          <ol className="mt-3 flex flex-col gap-1.5 text-xs text-gray-500 dark:text-gray-400 list-decimal list-inside leading-relaxed border-l-2 border-gray-200 dark:border-gray-800 pl-4">
             <li>
-              Go to <strong className="text-gray-700">eastsideprep.instructure.com</strong>
+              Go to <strong className="text-gray-700 dark:text-gray-200">eastsideprep.instructure.com</strong>
             </li>
             <li>
               Click your profile picture →{' '}
-              <strong className="text-gray-700">Account → Settings</strong>
+              <strong className="text-gray-700 dark:text-gray-200">Account → Settings</strong>
             </li>
             <li>
-              Scroll to <strong className="text-gray-700">Approved Integrations</strong>
+              Scroll to <strong className="text-gray-700 dark:text-gray-200">Approved Integrations</strong>
             </li>
             <li>
-              Click <strong className="text-gray-700">+ New Access Token</strong>
+              Click <strong className="text-gray-700 dark:text-gray-200">+ New Access Token</strong>
             </li>
             <li>Copy the token and paste it above</li>
           </ol>
         </details>
 
         <details className="mt-3">
-          <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 transition-colors">
+          <summary className="cursor-pointer text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors">
             Is this secure?
           </summary>
-          <div className="mt-3 flex flex-col gap-2 text-xs text-gray-500 leading-relaxed border-l-2 border-gray-200 pl-4">
+          <div className="mt-3 flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400 leading-relaxed border-l-2 border-gray-200 dark:border-gray-800 pl-4">
             <p>
               Your token is stored only in your browser, in an httpOnly encrypted cookie.
               JavaScript on the page can&apos;t read it, so XSS can&apos;t exfiltrate it directly.
@@ -178,7 +178,7 @@ function LoginContent() {
             </p>
             <p>
               The cookie is encrypted with{' '}
-              <code className="px-1 bg-gray-100 rounded text-[11px]">SESSION_SECRET</code>, so even
+              <code className="px-1 bg-gray-100 dark:bg-gray-800 rounded text-[11px]">SESSION_SECRET</code>, so even
               if someone intercepts your raw cookie they can&apos;t decrypt it without that secret.
             </p>
           </div>
@@ -188,7 +188,7 @@ function LoginContent() {
       {confirmGuestOpen && (
         <>
           <div
-            className="fixed inset-0 z-30 bg-black/30 backdrop-blur-sm"
+            className="fixed inset-0 z-30 bg-black/30 dark:bg-black/60 backdrop-blur-sm"
             onClick={() => !guestLoading && setConfirmGuestOpen(false)}
             aria-hidden="true"
           />
@@ -198,11 +198,11 @@ function LoginContent() {
             aria-modal="true"
             aria-labelledby="guest-confirm-title"
           >
-            <div className="w-full max-w-sm border border-gray-200 bg-white p-6 shadow-xl">
-              <h2 id="guest-confirm-title" className="text-sm font-medium text-gray-900 mb-2">
+            <div className="w-full max-w-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-6 shadow-xl">
+              <h2 id="guest-confirm-title" className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
                 Are you sure?
               </h2>
-              <p className="text-sm text-gray-500 leading-relaxed mb-5">
+              <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-5">
                 You won&apos;t be able to use your Dashboard, but other features will
                 be available.
               </p>
@@ -211,7 +211,7 @@ function LoginContent() {
                   type="button"
                   onClick={() => setConfirmGuestOpen(false)}
                   disabled={guestLoading}
-                  className="rounded-none border border-gray-300 px-4 py-2 text-xs font-light text-gray-700 hover:border-gray-500 transition-colors disabled:opacity-40"
+                  className="rounded-none border border-gray-300 dark:border-gray-700 px-4 py-2 text-xs font-light text-gray-700 dark:text-gray-300 hover:border-gray-500 dark:hover:border-gray-500 transition-colors disabled:opacity-40"
                 >
                   Cancel
                 </button>
@@ -219,7 +219,7 @@ function LoginContent() {
                   type="button"
                   onClick={continueAsGuest}
                   disabled={guestLoading}
-                  className="rounded-none bg-gray-900 px-4 py-2 text-xs font-light text-white hover:bg-gray-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="rounded-none bg-gray-900 dark:bg-gray-100 px-4 py-2 text-xs font-light text-white dark:text-gray-900 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   {guestLoading ? 'Continuing…' : 'Continue'}
                 </button>

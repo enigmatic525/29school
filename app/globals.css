@@ -1,9 +1,17 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #111111;
   color-scheme: light;
+}
+
+.dark {
+  --background: #0b0b0d;
+  --foreground: #e5e7eb;
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -50,6 +58,16 @@ body {
 .prose-assignment table { width: 100%; border-collapse: collapse; margin-bottom: 0.75rem; font-size: 0.8rem; }
 .prose-assignment th, .prose-assignment td { border: 1px solid #e5e7eb; padding: 0.4rem 0.6rem; text-align: left; }
 .prose-assignment th { background: #f9fafb; font-weight: 500; }
+
+.dark .prose-assignment h1,
+.dark .prose-assignment h2,
+.dark .prose-assignment h3 { color: #e5e7eb; }
+.dark .prose-assignment a { color: #9ca3af; }
+.dark .prose-assignment pre,
+.dark .prose-assignment code { background: #1f2937; color: #e5e7eb; }
+.dark .prose-assignment th,
+.dark .prose-assignment td { border-color: #374151; }
+.dark .prose-assignment th { background: #111827; }
 
 @media (prefers-reduced-motion: reduce) {
   *,

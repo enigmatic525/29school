@@ -46,8 +46,17 @@ export async function POST(request: NextRequest) {
   const global = rateLimit('feedback:global', 200, 10 * 60 * 1000)
   if (!global.allowed) return rateLimitResponse(global)
 
-  const parsed = await readJson<{ category?: unknown; message?: unknown }>(request, 32 * 1024)
+  const parsed = await readJson<{ category?: unknown; message?: unknown; website?: unknown }>(
+    request,
+    32 * 1024
+  )
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: parsed.status })
+
+  // Honeypot: any non-empty value here means a bot filled in a hidden field.
+  // Return 200 so the bot believes it succeeded and doesn't retry.
+  if (typeof parsed.data.website === 'string' && parsed.data.website.trim().length > 0) {
+    return NextResponse.json({ ok: true })
+  }
 
   const category = asTrimmedString(parsed.data.category, 100)
   const message = asTrimmedString(parsed.data.message, MAX_MESSAGE)

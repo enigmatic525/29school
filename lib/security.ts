@@ -1,3 +1,4 @@
+import 'server-only'
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from './session'
 
@@ -103,6 +104,134 @@ export async function readJson<T = unknown>(
     return { ok: false, status: 400, error: 'Invalid JSON shape' }
   }
   return { ok: true, data: data as T }
+}
+
+// ---------- Numeric validation ----------
+
+export function asPositiveInt(value: unknown, max: number = Number.MAX_SAFE_INTEGER): number | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return null
+  if (n < 1 || n > max) return null
+  return n
+}
+
+// ---------- HTML sanitisation (allowlist) ----------
+
+// Defense-in-depth for teacher-authored Canvas HTML rendered via
+// dangerouslySetInnerHTML. Allowlists tags and attributes, drops event
+// handlers and dangerous URL schemes. Not a replacement for trust in the
+// upstream source — but neutralises a compromised teacher account or a
+// Canvas content bug from leading to script execution in our origin.
+
+const HTML_ALLOWED_TAGS = new Set([
+  'p', 'br', 'hr', 'span', 'div', 'a', 'b', 'i', 'em', 'strong', 'u', 'small', 'sub', 'sup',
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td',
+  'img', 'figure', 'figcaption',
+])
+
+const HTML_VOID_TAGS = new Set(['br', 'hr', 'img'])
+
+const HTML_GLOBAL_ATTRS = new Set(['class', 'id', 'title'])
+
+const HTML_TAG_ATTRS: Record<string, Set<string>> = {
+  a: new Set(['href', 'title', 'rel', 'target']),
+  img: new Set(['src', 'alt', 'title', 'width', 'height']),
+  td: new Set(['colspan', 'rowspan']),
+  th: new Set(['colspan', 'rowspan', 'scope']),
+}
+
+// Decode &#x6A;avascript: style entity-encoded URL prefixes so the scheme
+// check below can't be bypassed.
+function decodeEntities(s: string): string {
+  return s.replace(/&(?:#x([0-9a-fA-F]+)|#(\d+)|([a-zA-Z]+));?/g, (full, hex, dec, named) => {
+    if (hex) {
+      const cp = parseInt(hex, 16)
+      return Number.isFinite(cp) && cp > 0 && cp < 0x110000 ? String.fromCodePoint(cp) : ''
+    }
+    if (dec) {
+      const cp = parseInt(dec, 10)
+      return Number.isFinite(cp) && cp > 0 && cp < 0x110000 ? String.fromCodePoint(cp) : ''
+    }
+    if (named === 'amp') return '&'
+    if (named === 'lt') return '<'
+    if (named === 'gt') return '>'
+    if (named === 'quot') return '"'
+    if (named === 'apos') return "'"
+    return full
+  })
+}
+
+function isSafeAttrUrl(raw: string): boolean {
+  const decoded = decodeEntities(raw).trim().toLowerCase().replace(/[\s\x00-\x1F\x7F]/g, '')
+  if (!decoded) return false
+  if (
+    decoded.startsWith('javascript:') ||
+    decoded.startsWith('vbscript:') ||
+    decoded.startsWith('data:') ||
+    decoded.startsWith('file:')
+  ) return false
+  return true
+}
+
+function escapeAttr(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/[\x00-\x1F\x7F]/g, '')
+}
+
+function sanitizeAttrs(tag: string, raw: string): string {
+  const out: string[] = []
+  const attrRe = /([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'`<>]+)))?/g
+  const allowedForTag = HTML_TAG_ATTRS[tag]
+  let m: RegExpExecArray | null
+  while ((m = attrRe.exec(raw))) {
+    const name = m[1]!.toLowerCase()
+    const val = m[2] ?? m[3] ?? m[4] ?? ''
+    if (name.startsWith('on')) continue
+    if (name === 'style') continue
+    if (name === 'srcset' || name === 'formaction' || name === 'xmlns' || name === 'xlink:href') continue
+    const allowed = HTML_GLOBAL_ATTRS.has(name) || (allowedForTag && allowedForTag.has(name))
+    if (!allowed) continue
+    if ((name === 'href' || name === 'src') && !isSafeAttrUrl(val)) continue
+    if (name === 'target' && val !== '_blank') continue
+    out.push(`${name}="${escapeAttr(val)}"`)
+  }
+  if (tag === 'a' && out.some((a) => a.startsWith('target='))) {
+    if (!out.some((a) => a.startsWith('rel='))) out.push('rel="noopener noreferrer"')
+  }
+  return out.length ? ' ' + out.join(' ') : ''
+}
+
+export function sanitizeHtml(input: string | null | undefined, maxLength = 200_000): string {
+  if (!input) return ''
+  let s = String(input).slice(0, maxLength)
+  // Strip dangerous block tags including their full content.
+  s = s.replace(
+    /<\s*(script|style|iframe|object|embed|noscript|template|svg|math)\b[^>]*>[\s\S]*?<\s*\/\s*\1\s*>/gi,
+    ''
+  )
+  // Strip self-closing or void variants of those + structural attack tags.
+  s = s.replace(
+    /<\s*\/?\s*(script|style|iframe|object|embed|noscript|template|svg|math|link|meta|form|input|button|base)\b[^>]*\/?>/gi,
+    ''
+  )
+  // Strip HTML/CDATA comments — they can hide payloads from the tag walker.
+  s = s.replace(/<!--[\s\S]*?-->/g, '')
+  s = s.replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
+  // Walk remaining tags through the allowlist.
+  s = s.replace(/<(\/)?\s*([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (_full, slash, rawTag, rawAttrs) => {
+    const tag = String(rawTag).toLowerCase()
+    if (!HTML_ALLOWED_TAGS.has(tag)) return ''
+    if (slash) return `</${tag}>`
+    const attrs = sanitizeAttrs(tag, rawAttrs)
+    return HTML_VOID_TAGS.has(tag) ? `<${tag}${attrs} />` : `<${tag}${attrs}>`
+  })
+  return s
 }
 
 // ---------- String validation ----------

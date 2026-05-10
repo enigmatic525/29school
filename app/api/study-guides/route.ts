@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) {
-    console.error('study-guides POST error', error)
+    console.error('study-guides POST error:', error.message)
     return NextResponse.json({ error: 'Could not save' }, { status: 500 })
   }
   return NextResponse.json({ guide: data })

@@ -80,19 +80,19 @@ export default function SubmitModal({ assignment, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 dark:bg-black/70 px-4"
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="w-full max-w-md bg-white border border-gray-200 shadow-xl">
+      <div className="w-full max-w-md bg-white dark:bg-gray-950 border border-gray-200 dark:border-gray-800 shadow-xl">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-4 py-3">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-200 dark:border-gray-800 px-4 py-3">
           <div className="min-w-0">
-            <p className="text-[10px] text-gray-400 mb-0.5">{assignment.courseCode}</p>
-            <h2 className="text-sm font-light text-gray-900 leading-snug">{assignment.name}</h2>
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{assignment.courseCode}</p>
+            <h2 className="text-sm font-light text-gray-900 dark:text-gray-100 leading-snug">{assignment.name}</h2>
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 mt-0.5 text-xs text-gray-400 hover:text-gray-700 transition-colors"
+            className="shrink-0 mt-0.5 text-xs text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 transition-colors"
           >
             ✕
           </button>
@@ -100,18 +100,18 @@ export default function SubmitModal({ assignment, onClose }: Props) {
 
         {done ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-sm font-light text-gray-900">Submitted</p>
-            <p className="mt-1 text-xs text-gray-400">Your work has been sent to Canvas.</p>
+            <p className="text-sm font-light text-gray-900 dark:text-gray-100">Submitted</p>
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Your work has been sent to Canvas.</p>
             <button
               onClick={onClose}
-              className="mt-5 text-xs text-gray-500 hover:text-gray-900 underline transition-colors"
+              className="mt-5 text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 underline transition-colors"
             >
               Close
             </button>
           </div>
         ) : !canSubmit ? (
           <div className="px-4 py-6 flex flex-col gap-3">
-            <p className="text-sm font-light text-gray-500">
+            <p className="text-sm font-light text-gray-500 dark:text-gray-400">
               {assignment.is_quiz_assignment
                 ? 'Quizzes must be taken directly on Canvas.'
                 : assignment.submission_types.includes('none') || assignment.submission_types.length === 0
@@ -126,7 +126,7 @@ export default function SubmitModal({ assignment, onClose }: Props) {
               href={safeHref(assignment.html_url)}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-gray-500 hover:text-gray-900 underline transition-colors"
+              className="text-xs text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 underline transition-colors"
             >
               Open in Canvas →
             </a>
@@ -142,8 +142,8 @@ export default function SubmitModal({ assignment, onClose }: Props) {
                     onClick={() => setType(t)}
                     className={`px-3 py-1 text-[11px] border transition-colors ${
                       type === t
-                        ? 'border-gray-900 bg-gray-900 text-white'
-                        : 'border-gray-200 text-gray-500 hover:border-gray-400'
+                        ? 'border-gray-900 bg-gray-900 text-white dark:border-gray-100 dark:bg-gray-100 dark:text-gray-900'
+                        : 'border-gray-200 text-gray-500 hover:border-gray-400 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-500'
                     }`}
                   >
                     {typeLabel(t)}
@@ -158,7 +158,7 @@ export default function SubmitModal({ assignment, onClose }: Props) {
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Write your answer…"
                 rows={5}
-                className="w-full border border-gray-200 p-3 text-sm font-light text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-500 resize-none"
+                className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 text-sm font-light text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 resize-none"
               />
             )}
 
@@ -168,7 +168,7 @@ export default function SubmitModal({ assignment, onClose }: Props) {
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="https://…"
-                className="w-full border border-gray-200 p-3 text-sm font-light text-gray-900 placeholder-gray-300 focus:outline-none focus:border-gray-500"
+                className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 text-sm font-light text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500"
               />
             )}
 
@@ -182,9 +182,9 @@ export default function SubmitModal({ assignment, onClose }: Props) {
                 />
                 <button
                   onClick={() => fileInput.current?.click()}
-                  className="w-full border border-dashed border-gray-300 py-6 text-sm font-light text-center transition-colors hover:border-gray-500"
+                  className="w-full border border-dashed border-gray-300 dark:border-gray-700 py-6 text-sm font-light text-center transition-colors hover:border-gray-500 dark:hover:border-gray-500"
                 >
-                  <span className={file ? 'text-gray-900' : 'text-gray-400'}>
+                  <span className={file ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
                     {file ? file.name : 'Click to choose a file'}
                   </span>
                 </button>
@@ -198,14 +198,14 @@ export default function SubmitModal({ assignment, onClose }: Props) {
                 href={safeHref(assignment.html_url)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-[11px] text-gray-400 hover:text-gray-700 underline transition-colors"
+                className="text-[11px] text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 underline transition-colors"
               >
                 View in Canvas
               </a>
               <button
                 onClick={submit}
                 disabled={loading}
-                className="bg-gray-900 text-white text-xs font-light px-5 py-2.5 hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-light px-5 py-2.5 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? 'Submitting…' : 'Submit to Canvas'}
               </button>

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import ThemeToggle from './ThemeToggle'
 
 const TABS = [
   { label: 'Canvas', href: '/canvas', match: ['/canvas', '/dashboard'] },
@@ -37,7 +38,7 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
   const firstName = name?.trim().split(/\s+/)[0] ?? ''
 
   return (
-    <header className="border-b border-gray-200 bg-white">
+    <header className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-[var(--background)]">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 sm:px-6">
         {/* Tabs */}
         <nav
@@ -53,8 +54,8 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
                 aria-current={active ? 'page' : undefined}
                 className={`px-3 sm:px-4 py-4 text-xs font-light border-b-2 transition-colors whitespace-nowrap ${
                   active
-                    ? 'border-gray-900 text-gray-900'
-                    : 'border-transparent text-gray-400 hover:text-gray-600'
+                    ? 'border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100'
+                    : 'border-transparent text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'
                 }`}
               >
                 {tab.label}
@@ -65,15 +66,15 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
 
         {/* User + settings */}
         <div className="flex items-center gap-3 relative shrink-0">
-          <span className="hidden sm:inline text-xs text-gray-400 truncate max-w-[10rem]">
+          <span className="hidden sm:inline text-xs text-gray-400 dark:text-gray-500 truncate max-w-[10rem]">
             {name}
           </span>
-          <span className="sm:hidden text-xs text-gray-400 truncate max-w-[5rem]">
+          <span className="sm:hidden text-xs text-gray-400 dark:text-gray-500 truncate max-w-[5rem]">
             {firstName}
           </span>
           <button
             onClick={() => setSettingsOpen((v) => !v)}
-            className="text-gray-400 hover:text-gray-700 transition-colors"
+            className="text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200 transition-colors"
             aria-label="Settings"
             aria-haspopup="menu"
             aria-expanded={settingsOpen}
@@ -94,15 +95,34 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
               <div
                 ref={menuRef}
                 role="menu"
-                className="absolute right-0 top-10 z-20 w-52 rounded-xl border border-gray-200 bg-white p-1 shadow-lg"
+                className="absolute right-0 top-10 z-20 w-60 rounded-xl border border-gray-200 bg-white p-1 shadow-lg dark:border-gray-800 dark:bg-gray-950 dark:shadow-black/40"
               >
-                <div className="px-3 py-2 text-xs text-gray-400 border-b border-gray-100 mb-1 truncate">
+                <div className="px-3 py-2 text-xs text-gray-400 dark:text-gray-500 border-b border-gray-100 dark:border-gray-800 mb-1 truncate">
                   {isGuest ? 'Guest mode' : name}
                 </div>
+
+                {/* Theme */}
+                <div className="px-3 py-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5">
+                    Appearance
+                  </p>
+                  <ThemeToggle />
+                </div>
+
+                <div className="my-1 border-t border-gray-100 dark:border-gray-800" />
+
+                <Link
+                  role="menuitem"
+                  href="/settings"
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors"
+                  onClick={() => setSettingsOpen(false)}
+                >
+                  Settings & notifications
+                </Link>
                 <Link
                   role="menuitem"
                   href="/login?from=settings"
-                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors"
                   onClick={() => setSettingsOpen(false)}
                 >
                   {isGuest ? 'Connect Canvas' : 'Update Canvas token'}
@@ -114,14 +134,14 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
                     setSettingsOpen(false)
                     router.refresh()
                   }}
-                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors"
                 >
                   Refresh data
                 </button>
                 <Link
                   role="menuitem"
                   href="/feedback"
-                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-900 transition-colors"
                   onClick={() => setSettingsOpen(false)}
                 >
                   Send feedback
@@ -130,7 +150,7 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
                   type="button"
                   role="menuitem"
                   onClick={signOut}
-                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-gray-50 transition-colors"
+                  className="flex w-full items-center rounded-lg px-3 py-2 text-sm text-red-500 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors"
                 >
                   Sign out
                 </button>
