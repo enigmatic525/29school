@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useMemo, useRef, useEffect } from 'react'
-import type { CanvasAssignment } from '@/lib/canvas'
-import { getAssignmentType, getAssignmentScore } from '@/lib/canvas'
+import type { CanvasAssignment } from '@/lib/canvas-shared'
+import { getAssignmentType, getAssignmentScore } from '@/lib/canvas-shared'
 import SubmitModal from './SubmitModal'
 import AssignmentDetail from './AssignmentDetail'
 

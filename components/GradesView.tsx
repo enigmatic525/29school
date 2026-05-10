@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import type { CourseGrade, GradedSubmission } from '@/lib/canvas'
-import { getAssignmentType } from '@/lib/canvas'
+import type { CourseGrade, GradedSubmission } from '@/lib/canvas-shared'
+import { getAssignmentType } from '@/lib/canvas-shared'
 
 const LS_KEY = '29-hidden-grades'
 

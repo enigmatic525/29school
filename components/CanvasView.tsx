@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import type { CanvasAssignment } from '@/lib/canvas'
-import { getAssignmentType } from '@/lib/canvas'
+import type { CanvasAssignment } from '@/lib/canvas-shared'
+import { getAssignmentType } from '@/lib/canvas-shared'
 import CalendarHeatmap from './CalendarHeatmap'
 import AssignmentDetail from './AssignmentDetail'
 

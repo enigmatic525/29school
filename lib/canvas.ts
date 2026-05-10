@@ -1,26 +1,24 @@
 import 'server-only'
 import { sanitizeHtml } from './security'
+import type {
+  CanvasAssignment,
+  CanvasCourse,
+  CourseGrade,
+  GradedSubmission,
+  RubricCriterionResult,
+  SubmissionComment,
+} from './canvas-shared'
 
-export interface CanvasCourse {
-  id: number
-  name: string
-  course_code: string
-}
-
-export interface CanvasAssignment {
-  id: number
-  name: string
-  due_at: string | null
-  points_possible: number
-  course_id: number
-  submission_types: string[]
-  html_url: string
-  is_quiz_assignment: boolean
-  description?: string | null
-  // added by our fetch layer
-  courseName?: string
-  courseCode?: string
-}
+export type {
+  AssignmentType,
+  CanvasAssignment,
+  CanvasCourse,
+  CourseGrade,
+  GradedSubmission,
+  RubricCriterionResult,
+  SubmissionComment,
+} from './canvas-shared'
+export { getAssignmentScore, getAssignmentType } from './canvas-shared'
 
 const DOMAIN = process.env.CANVAS_DOMAIN!
 
@@ -79,18 +77,6 @@ export async function fetchAllAssignments(token: string) {
   )
 
   return { assignments: results, courses }
-}
-
-export type AssignmentType = 'ma' | 'qa' | 'hw' | 'cw' | 'other'
-
-export function getAssignmentType(name: string): AssignmentType {
-  const prefix = name.trim().toUpperCase()
-  if (prefix.startsWith('MA:') || prefix.startsWith('MA ')) return 'ma'
-  if (prefix.startsWith('QA:') || prefix.startsWith('QA ')) return 'qa'
-  if (prefix.startsWith('HW/CW:') || prefix.startsWith('HW/CW ')) return 'hw'
-  if (prefix.startsWith('HW:') || prefix.startsWith('HW ')) return 'hw'
-  if (prefix.startsWith('CW:') || prefix.startsWith('CW ')) return 'cw'
-  return 'other'
 }
 
 export async function submitTextOrUrl(
@@ -171,47 +157,6 @@ export async function submitFileAssignment(
   )
   if (!submitRes.ok) throw new Error(`Assignment submit failed: ${submitRes.status}`)
   return submitRes.json()
-}
-
-export function getAssignmentScore(name: string): number {
-  switch (getAssignmentType(name)) {
-    case 'ma': return 10
-    case 'qa': return 5
-    case 'hw': return 1
-    case 'cw':
-    case 'other':
-    default: return 0
-  }
-}
-
-export interface SubmissionComment {
-  id: number | string
-  author: string
-  text: string
-  createdAt: string | null
-}
-
-export interface RubricCriterionResult {
-  id: string
-  description: string | null
-  longDescription: string | null
-  points: number | null
-  maxPoints: number | null
-  ratingDescription: string | null
-  comment: string | null
-}
-
-export interface GradedSubmission {
-  id: number
-  assignmentName: string
-  courseCode: string
-  score: number | null
-  grade: string | null
-  pointsPossible: number | null
-  gradedAt: string
-  htmlUrl: string | null
-  comments: SubmissionComment[]
-  rubric: RubricCriterionResult[]
 }
 
 export async function fetchRecentSubmissions(token: string, courses: CanvasCourse[]): Promise<GradedSubmission[]> {
@@ -307,14 +252,6 @@ export async function fetchRecentSubmissions(token: string, courses: CanvasCours
   return perCourse.flat().sort((a, b) =>
     new Date(b.gradedAt).getTime() - new Date(a.gradedAt).getTime()
   )
-}
-
-export interface CourseGrade {
-  courseId: number
-  courseName: string
-  courseCode: string
-  currentScore: number | null
-  currentGrade: string | null
 }
 
 export async function fetchGrades(token: string): Promise<CourseGrade[]> {

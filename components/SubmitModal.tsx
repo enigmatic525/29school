@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import type { CanvasAssignment } from '@/lib/canvas'
+import type { CanvasAssignment } from '@/lib/canvas-shared'
 
 interface Props {
   assignment: CanvasAssignment
