@@ -5,10 +5,11 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
 const TABS = [
-  { label: 'Dashboard', href: '/dashboard' },
-  { label: 'Feedback', href: '/feedback' },
-  { label: 'Study Guides', href: '/study-guides' },
-  { label: 'Notice Board', href: '/notice-board' },
+  { label: 'Canvas', href: '/canvas', match: ['/canvas', '/dashboard'] },
+  { label: 'Grades', href: '/grades', match: ['/grades'] },
+  { label: 'Study Guides', href: '/study-guides', match: ['/study-guides'] },
+  { label: 'Notice Board', href: '/notice-board', match: ['/notice-board'] },
+  { label: 'Feedback', href: '/feedback', match: ['/feedback'] },
 ]
 
 export default function AppNav({ name, isGuest = false }: { name: string; isGuest?: boolean }) {
@@ -38,21 +39,13 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 sm:px-6">
-        {/* Logo */}
-        <Link
-          href="/dashboard"
-          className="py-4 text-xs font-light text-gray-900 hover:text-gray-600 transition-colors shrink-0"
-        >
-          Class of 2029
-        </Link>
-
         {/* Tabs */}
         <nav
           aria-label="Primary"
           className="flex items-center -mx-1 overflow-x-auto scrollbar-none"
         >
           {TABS.map((tab) => {
-            const active = pathname === tab.href
+            const active = tab.match.some((m) => pathname === m || pathname.startsWith(m + '/'))
             return (
               <Link
                 key={tab.href}

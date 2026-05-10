@@ -8,6 +8,7 @@ import AssignmentDetail from './AssignmentDetail'
 
 interface Props {
   assignments: CanvasAssignment[]
+  showBoth?: boolean
 }
 
 interface Week {
@@ -410,7 +411,7 @@ function MonthCalendar({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function CalendarHeatmap({ assignments }: Props) {
+export default function CalendarHeatmap({ assignments, showBoth = false }: Props) {
   const [activeTab, setActiveTab] = useState<'overview' | 'calendar'>('calendar')
   const [selectedWeekIdx, setSelectedWeekIdx] = useState<number | null>(null)
   const [submittingAssignment, setSubmittingAssignment] = useState<CanvasAssignment | null>(null)
@@ -563,25 +564,27 @@ export default function CalendarHeatmap({ assignments }: Props) {
 
   return (
     <>
-      {/* Tab switcher */}
-      <div className="flex gap-5 border-b border-gray-200 mb-6">
-        {(['overview', 'calendar'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`pb-2.5 text-xs font-light capitalize border-b-2 transition-colors -mb-px ${
-              activeTab === tab
-                ? 'border-gray-900 text-gray-900'
-                : 'border-transparent text-gray-400 hover:text-gray-600'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
+      {/* Tab switcher — hidden in showBoth mode */}
+      {!showBoth && (
+        <div className="flex gap-5 border-b border-gray-200 mb-6">
+          {(['overview', 'calendar'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`pb-2.5 text-xs font-light capitalize border-b-2 transition-colors -mb-px ${
+                activeTab === tab
+                  ? 'border-gray-900 text-gray-900'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* ── Overview tab ── */}
-      {activeTab === 'overview' && (
+      {(activeTab === 'overview' || showBoth) && (
         <div className="flex flex-col gap-6">
           {/* 8-week heatmap */}
           <div className="grid grid-cols-4 gap-2 sm:grid-cols-8">
@@ -834,13 +837,16 @@ export default function CalendarHeatmap({ assignments }: Props) {
       )}
 
       {/* ── Calendar tab ── */}
-      {activeTab === 'calendar' && (
+      {(activeTab === 'calendar' || showBoth) && (
+        <>
+        {showBoth && <div className="border-t border-gray-200 my-8" />}
         <MonthCalendar
           assignments={assignments}
           plannedDates={plannedDates}
           onMove={handleCalendarMove}
           onDetail={(a) => setDetailAssignment(a)}
         />
+        </>
       )}
 
       {submittingAssignment && (

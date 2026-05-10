@@ -175,3 +175,94 @@ export function getAssignmentScore(name: string): number {
     default: return 0
   }
 }
+
+export interface GradedSubmission {
+  id: number
+  assignmentName: string
+  courseCode: string
+  score: number | null
+  grade: string | null
+  pointsPossible: number | null
+  gradedAt: string
+}
+
+export async function fetchRecentSubmissions(token: string, courses: CanvasCourse[]): Promise<GradedSubmission[]> {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() - 30)
+
+  const perCourse = await Promise.all(
+    courses.map(async (course) => {
+      try {
+        const res = await fetch(
+          `https://${DOMAIN}/api/v1/courses/${course.id}/students/submissions?student_ids[]=self&include[]=assignment&per_page=50`,
+          { headers: headers(token) }
+        )
+        if (!res.ok) return []
+        const data = await res.json()
+        if (!Array.isArray(data)) return []
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        return data.filter((s: any) => {
+          if (!s.graded_at) return false
+          if (s.score === null && !s.grade) return false
+          return new Date(s.graded_at) >= cutoff
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        }).map((s: any) => {
+          const a = s.assignment as Record<string, unknown> | undefined
+          const score = typeof s.score === 'number' ? s.score : null
+          const pp = typeof a?.points_possible === 'number' ? a.points_possible : null
+          return {
+            id: s.id as number,
+            assignmentName: (a?.name as string) ?? 'Unknown Assignment',
+            courseCode: course.course_code,
+            score,
+            grade: typeof s.grade === 'string' ? s.grade : null,
+            pointsPossible: pp,
+            gradedAt: s.graded_at as string,
+          } satisfies GradedSubmission
+        })
+      } catch {
+        return []
+      }
+    })
+  )
+
+  return perCourse.flat().sort((a, b) =>
+    new Date(b.gradedAt).getTime() - new Date(a.gradedAt).getTime()
+  )
+}
+
+export interface CourseGrade {
+  courseId: number
+  courseName: string
+  courseCode: string
+  currentScore: number | null
+  currentGrade: string | null
+}
+
+export async function fetchGrades(token: string): Promise<CourseGrade[]> {
+  const res = await fetch(
+    `https://${DOMAIN}/api/v1/courses?enrollment_type=student&enrollment_state=active&include[]=total_scores&per_page=100`,
+    { headers: headers(token) }
+  )
+  if (!res.ok) return []
+  const data = await res.json()
+  if (!Array.isArray(data)) return []
+
+  const results: CourseGrade[] = []
+  for (const course of data) {
+    const enrollment = Array.isArray(course.enrollments) ? course.enrollments[0] : null
+    const score = enrollment?.computed_current_score ?? null
+    const grade = enrollment?.computed_current_grade ?? null
+    if (score !== null || grade !== null) {
+      results.push({
+        courseId: course.id,
+        courseName: course.name,
+        courseCode: course.course_code,
+        currentScore: typeof score === 'number' ? score : null,
+        currentGrade: typeof grade === 'string' ? grade : null,
+      })
+    }
+  }
+  return results
+}

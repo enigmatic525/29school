@@ -16,33 +16,33 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "29.school — Tools for the Eastside Prep Class of 2029",
+    default: "29.school",
     template: "%s · 29.school",
   },
   description:
-    "Dashboard, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
+    "Canvas, grades, study guides, and tools for the Eastside Prep Class of 2029.",
   applicationName: "29.school",
   authors: [{ name: "Class of 2029" }],
   keywords: [
     "Eastside Prep",
     "Class of 2029",
-    "dashboard",
     "Canvas",
+    "grades",
     "study guides",
   ],
   formatDetection: { email: false, address: false, telephone: false },
   openGraph: {
     type: "website",
     siteName: "29.school",
-    title: "29.school — Tools for the Eastside Prep Class of 2029",
+    title: "29.school",
     description:
-      "Dashboard, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
+      "Canvas, grades, study guides, and tools for the Eastside Prep Class of 2029.",
   },
   twitter: {
     card: "summary",
     title: "29.school",
     description:
-      "Dashboard, anonymous feedback, and shared study guides for the Eastside Prep Class of 2029.",
+      "Canvas, grades, study guides, and tools for the Eastside Prep Class of 2029.",
   },
   robots: { index: true, follow: true },
 };
