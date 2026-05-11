@@ -196,7 +196,26 @@ function DashboardTab({
       const raw = localStorage.getItem('29-planned-dates')
       if (raw) setPlannedDates(JSON.parse(raw))
     } catch {}
+    try {
+      const raw = localStorage.getItem('29-dashboard-filters')
+      if (raw) {
+        const v = JSON.parse(raw) as { course?: string; hideSubmitted?: boolean }
+        if (typeof v.course === 'string') setFilterCourse(v.course)
+        if (typeof v.hideSubmitted === 'boolean') setHideSubmitted(v.hideSubmitted)
+      }
+    } catch {}
   }, [])
+
+  // Persist filter state so it survives reload — but not search, since a
+  // stale search the next morning would silently hide today's work.
+  useEffect(() => {
+    try {
+      localStorage.setItem('29-dashboard-filters', JSON.stringify({
+        course: filterCourse,
+        hideSubmitted,
+      }))
+    } catch {}
+  }, [filterCourse, hideSubmitted])
 
   function toggleComplete(id: number) {
     setCompletedIds((prev) => {
@@ -516,6 +535,10 @@ function DashboardTab({
         <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-red-100 border border-red-200 dark:bg-red-950/40 dark:border-red-900/60 inline-block"/>MA</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-amber-100 border border-amber-200 dark:bg-amber-950/40 dark:border-amber-900/60 inline-block"/>QA</span>
         <span className="inline-flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-blue-100 border border-blue-200 dark:bg-blue-950/40 dark:border-blue-900/60 inline-block"/>HW</span>
+        <span className="hidden sm:inline-flex items-center gap-2 ml-2 opacity-70">
+          <kbd className="text-[9px] border border-gray-200 dark:border-gray-700 px-1 leading-none py-0.5">/</kbd> search
+          <kbd className="text-[9px] border border-gray-200 dark:border-gray-700 px-1 leading-none py-0.5">t</kbd> today
+        </span>
         <button onClick={onSwitchToEdit} className="ml-auto text-[10px] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
           Calendar view →
         </button>
@@ -550,6 +573,17 @@ function DashboardTab({
 
 export default function CanvasView({ assignments }: { assignments: CanvasAssignment[] }) {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'edit'>('dashboard')
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('29-canvas-tab')
+      if (raw === 'dashboard' || raw === 'edit') setActiveTab(raw)
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    try { localStorage.setItem('29-canvas-tab', activeTab) } catch {}
+  }, [activeTab])
 
   const tabs = [
     { id: 'dashboard' as const, label: 'Dashboard' },
