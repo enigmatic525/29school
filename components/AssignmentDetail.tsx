@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas-shared'
 
 const SUBMITTABLE = ['online_upload', 'online_text_entry', 'online_url'] as const
@@ -50,6 +50,14 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !loading) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, loading])
 
   async function submit() {
     setLoading(true)
@@ -111,7 +119,7 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
         </div>
 
         {/* Due date */}
-        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400">
+        <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800 shrink-0 flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400 flex-wrap">
           {planned && isShifted ? (
             <>
               <span>
@@ -133,10 +141,36 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
           {assignment.points_possible > 0 && (
             <>
               <span className="text-gray-300 dark:text-gray-700">·</span>
-              <span>{assignment.points_possible} pts</span>
+              <span>
+                {typeof assignment.score === 'number'
+                  ? <><span className="text-emerald-700 dark:text-emerald-300">{assignment.score}</span> / {assignment.points_possible} pts</>
+                  : <>{assignment.points_possible} pts</>}
+              </span>
             </>
           )}
         </div>
+
+        {/* Submission status banner */}
+        {(assignment.submittedAt || assignment.isLate || assignment.isMissing) && (
+          <div className={`px-5 py-2 border-b text-xs flex items-center gap-2 shrink-0 ${
+            assignment.isMissing || (assignment.isLate && !assignment.submittedAt)
+              ? 'bg-red-50 dark:bg-red-950/30 border-red-100 dark:border-red-900/60 text-red-700 dark:text-red-300'
+              : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'
+          }`}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              {assignment.isMissing || (assignment.isLate && !assignment.submittedAt)
+                ? <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>
+                : <polyline points="20 6 9 17 4 12" />}
+            </svg>
+            <span>
+              {assignment.isMissing
+                ? 'Missing — not yet submitted'
+                : assignment.submittedAt
+                ? `${assignment.submissionState === 'graded' ? 'Graded' : 'Submitted'}${assignment.isLate ? ' (late)' : ''} · ${new Date(assignment.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+                : 'Marked late on Canvas'}
+            </span>
+          </div>
+        )}
 
         {/* Scrollable body: description + submission */}
         <div className="flex-1 overflow-y-auto">
@@ -160,6 +194,10 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
             {done ? (
               <p className="text-sm font-light text-gray-500 dark:text-gray-400">
                 Submitted — your work has been sent to Canvas.
+              </p>
+            ) : assignment.submittedAt ? (
+              <p className="text-sm font-light text-gray-500 dark:text-gray-400">
+                You&apos;ve already submitted this assignment. Open it in Canvas to resubmit if your teacher allows it.
               </p>
             ) : !canSubmit ? (
               <p className="text-sm font-light text-gray-500 dark:text-gray-400">

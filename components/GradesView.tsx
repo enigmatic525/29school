@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { CourseGrade, GradedSubmission } from '@/lib/canvas-shared'
 import { getAssignmentType } from '@/lib/canvas-shared'
+import { courseColor } from '@/lib/course-colors'
 
 const LS_KEY = '29-hidden-grades'
 
@@ -121,12 +122,15 @@ function GradesTab({ grades }: { grades: CourseGrade[] }) {
       </div>
 
       <div className="flex flex-col gap-2">
-        {sorted.map((grade) => (
-          <div key={grade.courseId} className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-5 py-4">
+        {sorted.map((grade) => {
+          const color = courseColor(grade.courseCode)
+          return (
+          <div key={grade.courseId} className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-5 py-4 relative">
+            <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-sm ${color.dot}`} aria-hidden />
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-light text-gray-900 dark:text-gray-100 leading-snug truncate">{grade.courseName}</p>
-                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">{grade.courseCode}</p>
+                <p className={`text-[11px] mt-0.5 ${color.text}`}>{grade.courseCode}</p>
               </div>
               <div className="shrink-0 flex items-center gap-3">
                 <div className="text-right">
@@ -158,7 +162,8 @@ function GradesTab({ grades }: { grades: CourseGrade[] }) {
               />
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
 
       {sorted.length === 0 && (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas-shared'
 
 interface Props {
@@ -41,6 +41,14 @@ export default function SubmitModal({ assignment, onClose }: Props) {
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !loading) onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, loading])
 
   async function submit() {
     setLoading(true)

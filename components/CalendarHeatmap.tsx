@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas-shared'
 import { getAssignmentType, getAssignmentScore } from '@/lib/canvas-shared'
+import { courseColor } from '@/lib/course-colors'
 import SubmitModal from './SubmitModal'
 import AssignmentDetail from './AssignmentDetail'
 
@@ -365,6 +366,7 @@ function MonthCalendar({
               {shown.map((a) => {
                 const type = getAssignmentType(a.name)
                 const isShifted = !!plannedDates[a.id]
+                const color = courseColor(a.courseCode)
                 return (
                   <div
                     key={a.id}
@@ -379,8 +381,9 @@ function MonthCalendar({
                     className={`flex items-center gap-1 px-1 py-0.5 rounded-sm text-[10px] leading-tight cursor-pointer select-none transition-opacity ${
                       dragId === a.id ? 'opacity-40' : isInvalid ? 'opacity-40' : ''
                     } ${typeBg(type)}`}
-                    title={a.name}
+                    title={`${a.courseCode ?? ''} · ${a.name}`}
                   >
+                    <span className={`w-1 h-3 rounded-sm shrink-0 ${color.dot}`} aria-hidden />
                     <span className="truncate flex-1 min-w-0">{a.name}</span>
                     {isShifted && (
                       <span className="shrink-0 opacity-50 text-[8px]">↑</span>

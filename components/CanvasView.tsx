@@ -3,8 +3,18 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas-shared'
 import { getAssignmentType } from '@/lib/canvas-shared'
+import { courseColor } from '@/lib/course-colors'
 import CalendarHeatmap from './CalendarHeatmap'
 import AssignmentDetail from './AssignmentDetail'
+
+function isAssignmentSubmitted(a: CanvasAssignment): boolean {
+  return (
+    !!a.submittedAt ||
+    a.submissionState === 'submitted' ||
+    a.submissionState === 'graded' ||
+    a.submissionState === 'pending_review'
+  )
+}
 
 // ─── Date helpers ─────────────────────────────────────────────────────────────
 
@@ -55,23 +65,28 @@ function AssignmentRow({
   const type = getAssignmentType(assignment.name)
   const due = new Date(assignment.due_at!)
   const dueTime = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+  const submitted = isAssignmentSubmitted(assignment)
+  const done = isCompleted || submitted
+  const overdue = isPast && !submitted
+  const color = courseColor(assignment.courseCode)
 
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800/60 last:border-b-0 group transition-colors hover:bg-gray-50 dark:hover:bg-gray-900 ${
-        isCompleted || isPast ? 'opacity-50' : ''
+        done || isPast ? 'opacity-50' : ''
       }`}
     >
       <button
         onClick={onToggleComplete}
         aria-label={isCompleted ? 'Mark incomplete' : 'Mark complete'}
+        title={submitted ? 'Submitted on Canvas — click to override locally' : undefined}
         className={`shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
-          isCompleted
-            ? 'bg-gray-500 border-gray-500 dark:bg-gray-400 dark:border-gray-400'
+          done
+            ? 'bg-emerald-500 border-emerald-500 dark:bg-emerald-400 dark:border-emerald-400'
             : 'border-gray-300 hover:border-gray-500 dark:border-gray-600 dark:hover:border-gray-400'
         }`}
       >
-        {isCompleted && (
+        {done && (
           <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <polyline points="20 6 9 17 4 12"/>
           </svg>
@@ -84,23 +99,70 @@ function AssignmentRow({
         </span>
       )}
 
-      <button onClick={onDetail} className="flex-1 text-left min-w-0">
+      <button onClick={onDetail} className="flex-1 text-left min-w-0 flex items-center gap-2">
         <span className={`text-sm font-light leading-snug block truncate transition-colors ${
-          isCompleted
+          done
             ? 'line-through text-gray-300 dark:text-gray-600'
+            : overdue
+            ? 'text-red-700 dark:text-red-400 group-hover:text-red-900 dark:group-hover:text-red-300'
             : 'text-gray-800 dark:text-gray-200 group-hover:text-gray-900 dark:group-hover:text-gray-100'
         }`}>
           {assignment.name}
         </span>
+        {assignment.isLate && !submitted && (
+          <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded-sm leading-none bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/60">
+            Late
+          </span>
+        )}
+        {assignment.isMissing && (
+          <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded-sm leading-none bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/60">
+            Missing
+          </span>
+        )}
+        {submitted && (
+          <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded-sm leading-none bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/60">
+            {assignment.submissionState === 'graded' ? 'Graded' : 'Submitted'}
+          </span>
+        )}
       </button>
 
-      <div className="shrink-0 text-right hidden sm:block">
-        <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-none mb-0.5">{assignment.courseCode}</p>
-        <p className="text-[10px] text-gray-300 dark:text-gray-600 leading-none">{dueTime}</p>
+      <div className="shrink-0 text-right hidden sm:flex items-center gap-2">
+        {assignment.courseCode && (
+          <span className="inline-flex items-center gap-1.5">
+            <span className={`w-1.5 h-1.5 rounded-full ${color.dot}`} aria-hidden />
+            <span className={`text-[11px] leading-none ${color.text}`}>{assignment.courseCode}</span>
+          </span>
+        )}
+        <span className="text-[10px] text-gray-300 dark:text-gray-600 leading-none">{dueTime}</span>
       </div>
-      <div className="shrink-0 sm:hidden">
-        <p className="text-[10px] text-gray-400 dark:text-gray-500">{dueTime}</p>
+      <div className="shrink-0 sm:hidden flex items-center gap-1.5">
+        <span className={`w-1.5 h-1.5 rounded-full ${color.dot}`} aria-hidden />
+        <span className="text-[10px] text-gray-400 dark:text-gray-500">{dueTime}</span>
       </div>
+    </div>
+  )
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+
+function StatCard({ label, count, tone = 'default' }: { label: string; count: number; tone?: 'default' | 'red' }) {
+  const isRed = tone === 'red'
+  return (
+    <div className={`border px-3 py-2 flex flex-col ${
+      isRed
+        ? 'border-red-200 bg-red-50 dark:border-red-900/60 dark:bg-red-950/30'
+        : 'border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/40'
+    }`}>
+      <span className={`text-[10px] uppercase tracking-wider ${
+        isRed ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'
+      }`}>
+        {label}
+      </span>
+      <span className={`text-lg font-light leading-tight ${
+        isRed ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-gray-100'
+      }`}>
+        {count}
+      </span>
     </div>
   )
 }
@@ -118,9 +180,12 @@ function DashboardTab({
   const [plannedDates, setPlannedDates] = useState<Record<number, string>>({})
   const [detailAssignment, setDetailAssignment] = useState<CanvasAssignment | null>(null)
   const [filterCourse, setFilterCourse] = useState<string>('')
+  const [search, setSearch] = useState<string>('')
+  const [hideSubmitted, setHideSubmitted] = useState(false)
   const todayAnchorRef = useRef<HTMLDivElement | null>(null)
   const hasScrolledRef = useRef(false)
   const [returnArrow, setReturnArrow] = useState<'up' | 'down' | null>(null)
+  const searchInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     try {
@@ -171,8 +236,11 @@ function DashboardTab({
     const tomorrowStr = toDateStr(tomorrow)
     const yesterdayStr = toDateStr(yesterday)
 
+    const q = search.trim().toLowerCase()
     const filtered = assignments.filter((a) => {
       if (filterCourse && a.courseCode !== filterCourse) return false
+      if (q && !a.name.toLowerCase().includes(q) && !(a.courseCode ?? '').toLowerCase().includes(q)) return false
+      if (hideSubmitted && isAssignmentSubmitted(a)) return false
       return true
     })
 
@@ -210,17 +278,43 @@ function DashboardTab({
     }
     return result
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignments, plannedDates, filterCourse])
+  }, [assignments, plannedDates, filterCourse, search, hideSubmitted])
 
   const upcomingCount = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
     return groups.reduce(
       (n, g) => n + (g.isPast ? 0 : g.assignments.length),
       0,
     )
   }, [groups])
   const totalCompleted = assignments.filter((a) => completedIds.has(a.id)).length
+
+  // Planner-style stat counts. Excludes assignments already submitted or
+  // locally marked complete so it always reflects work remaining.
+  const summary = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const endOfWeek = new Date(today)
+    endOfWeek.setDate(endOfWeek.getDate() + 7)
+    let dueToday = 0
+    let dueTomorrow = 0
+    let thisWeek = 0
+    let overdue = 0
+    for (const a of assignments) {
+      if (isAssignmentSubmitted(a)) continue
+      if (completedIds.has(a.id)) continue
+      const eff = new Date(effectiveDate(a))
+      eff.setHours(0, 0, 0, 0)
+      const t = eff.getTime()
+      if (t === today.getTime()) dueToday++
+      else if (t === tomorrow.getTime()) dueTomorrow++
+      if (eff >= today && eff < endOfWeek) thisWeek++
+      if (t < today.getTime()) overdue++
+    }
+    return { dueToday, dueTomorrow, thisWeek, overdue }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignments, plannedDates, completedIds])
 
   // Land on Today (or the first non-past group) on mount, so the user can
   // scroll up to past dates like Canvas Planner.
@@ -266,13 +360,63 @@ function DashboardTab({
     todayAnchorRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
 
+  // Keyboard shortcuts. `/` focuses search, `t` jumps to today. Both are
+  // ignored if focus is inside a text field so they don't hijack typing.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      const editable =
+        tag === 'INPUT' ||
+        tag === 'TEXTAREA' ||
+        tag === 'SELECT' ||
+        (e.target as HTMLElement | null)?.isContentEditable
+      if (editable) return
+      if (e.key === '/') {
+        e.preventDefault()
+        searchInputRef.current?.focus()
+      } else if (e.key === 't' || e.key === 'T') {
+        e.preventDefault()
+        scrollToToday()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   return (
     <>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        <StatCard label="Due today" count={summary.dueToday} />
+        <StatCard label="Tomorrow" count={summary.dueTomorrow} />
+        <StatCard label="This week" count={summary.thisWeek} />
+        <StatCard label="Overdue" count={summary.overdue} tone={summary.overdue > 0 ? 'red' : 'default'} />
+      </div>
+
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <p className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
           {upcomingCount} upcoming
           {totalCompleted > 0 && <span className="ml-2 text-gray-300 dark:text-gray-600">· {totalCompleted} completed</span>}
         </p>
+
+        <div className="relative">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 pointer-events-none">
+            <circle cx="11" cy="11" r="7" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            ref={searchInputRef}
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search…"
+            aria-label="Search assignments"
+            className="pl-7 pr-2 py-1 w-32 sm:w-44 text-xs text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors"
+          />
+          {!search && (
+            <kbd className="hidden sm:inline absolute right-2 top-1/2 -translate-y-1/2 text-[9px] text-gray-300 dark:text-gray-600 border border-gray-200 dark:border-gray-700 px-1 leading-none py-0.5 pointer-events-none">/</kbd>
+          )}
+        </div>
 
         {courses.length > 1 && (
           <select
@@ -284,16 +428,42 @@ function DashboardTab({
             {courses.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
+
+        <button
+          onClick={() => setHideSubmitted((v) => !v)}
+          className={`text-xs border px-2 py-1 transition-colors ${
+            hideSubmitted
+              ? 'border-gray-700 dark:border-gray-300 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900'
+              : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500'
+          }`}
+          aria-pressed={hideSubmitted}
+        >
+          {hideSubmitted ? 'Submitted hidden' : 'Hide submitted'}
+        </button>
       </div>
 
       {groups.length === 0 ? (
         <div className="border border-dashed border-gray-200 dark:border-gray-800 py-16 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">No assignments to show.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            {search || filterCourse || hideSubmitted ? 'No assignments match your filters.' : 'No assignments to show.'}
+          </p>
+          {(search || filterCourse || hideSubmitted) && (
+            <button
+              onClick={() => { setSearch(''); setFilterCourse(''); setHideSubmitted(false) }}
+              className="mt-2 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            >
+              Clear filters →
+            </button>
+          )}
         </div>
       ) : (
         <div className="border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
           {groups.map((group) => (
-            <div key={group.key} ref={group.key === todayAnchorKey ? todayAnchorRef : undefined}>
+            <div
+              key={group.key}
+              ref={group.key === todayAnchorKey ? todayAnchorRef : undefined}
+              className="scroll-mt-16"
+            >
               <div className={`flex items-baseline gap-2 px-4 py-2.5 ${
                 group.isToday
                   ? 'bg-gray-900 dark:bg-gray-700'
@@ -388,20 +558,22 @@ export default function CanvasView({ assignments }: { assignments: CanvasAssignm
 
   return (
     <>
-      <div className="flex gap-5 border-b border-gray-200 dark:border-gray-800 mb-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`pb-2.5 text-xs font-light border-b-2 transition-colors -mb-px ${
-              activeTab === tab.id
-                ? 'border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100'
-                : 'border-transparent text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="sticky top-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 mb-6 bg-white/95 dark:bg-[var(--background)]/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+        <div className="flex gap-5">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`pb-2.5 text-xs font-light border-b-2 transition-colors -mb-px ${
+                activeTab === tab.id
+                  ? 'border-gray-900 text-gray-900 dark:border-gray-100 dark:text-gray-100'
+                  : 'border-transparent text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {activeTab === 'dashboard' && (

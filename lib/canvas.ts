@@ -47,18 +47,32 @@ export async function fetchCourses(token: string): Promise<CanvasCourse[]> {
 
 export async function fetchAssignments(token: string, courseId: number): Promise<CanvasAssignment[]> {
   const res = await fetch(
-    `https://${DOMAIN}/api/v1/courses/${courseId}/assignments?per_page=100&order_by=due_at`,
+    `https://${DOMAIN}/api/v1/courses/${courseId}/assignments?per_page=100&order_by=due_at&include[]=submission`,
     { headers: headers(token) }
   )
   if (!res.ok) return []
   const data = await res.json()
   if (!Array.isArray(data)) return []
   // Sanitise teacher-authored description HTML at the data boundary so every
-  // downstream renderer gets safe content.
-  return data.map((a: CanvasAssignment) => ({
-    ...a,
-    description: typeof a.description === 'string' ? sanitizeHtml(a.description) : a.description ?? null,
-  }))
+  // downstream renderer gets safe content. Lift submission state into flat
+  // fields so the client never has to traverse Canvas's response shape.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return data.map((a: any) => {
+    const sub = a?.submission as Record<string, unknown> | undefined
+    const workflow = typeof sub?.workflow_state === 'string' ? sub.workflow_state : null
+    return {
+      ...a,
+      description: typeof a.description === 'string' ? sanitizeHtml(a.description) : a.description ?? null,
+      submissionState:
+        workflow === 'submitted' || workflow === 'graded' || workflow === 'pending_review' || workflow === 'unsubmitted'
+          ? workflow
+          : null,
+      submittedAt: typeof sub?.submitted_at === 'string' ? sub.submitted_at : null,
+      isLate: sub?.late === true,
+      isMissing: sub?.missing === true,
+      score: typeof sub?.score === 'number' ? sub.score : null,
+    } satisfies CanvasAssignment
+  })
 }
 
 export async function fetchAllAssignments(token: string) {

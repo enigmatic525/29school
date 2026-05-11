@@ -17,6 +17,12 @@ export interface CanvasAssignment {
   // added by our fetch layer
   courseName?: string
   courseCode?: string
+  // submission state, lifted from the included submission object
+  submissionState?: 'submitted' | 'graded' | 'pending_review' | 'unsubmitted' | null
+  submittedAt?: string | null
+  isLate?: boolean
+  isMissing?: boolean
+  score?: number | null
 }
 
 export type AssignmentType = 'ma' | 'qa' | 'hw' | 'cw' | 'other'
