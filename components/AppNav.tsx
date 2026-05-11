@@ -38,7 +38,7 @@ export default function AppNav({ name, isGuest = false }: { name: string; isGues
   const firstName = name?.trim().split(/\s+/)[0] ?? ''
 
   return (
-    <header className="border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-[var(--background)]">
+    <header className="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur dark:border-gray-800 dark:bg-[var(--background)]/95">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-2 px-4 sm:px-6">
         {/* Tabs */}
         <nav

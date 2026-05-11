@@ -549,7 +549,7 @@ function DashboardTab({
             <div
               key={group.key}
               ref={group.key === todayAnchorKey ? todayAnchorRef : undefined}
-              className="scroll-mt-16"
+              className="scroll-mt-28"
             >
               <div className={`flex items-baseline gap-2 px-4 py-2.5 ${
                 group.isToday
@@ -660,7 +660,7 @@ export default function CanvasView({ assignments }: { assignments: CanvasAssignm
 
   return (
     <>
-      <div className="sticky top-0 z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 mb-6 bg-white/95 dark:bg-[var(--background)]/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
+      <div className="sticky top-[52px] z-30 -mx-4 sm:-mx-6 px-4 sm:px-6 pt-3 mb-6 bg-white/95 dark:bg-[var(--background)]/95 backdrop-blur border-b border-gray-200 dark:border-gray-800">
         <div className="flex gap-5">
           {tabs.map((tab) => (
             <button
