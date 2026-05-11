@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas-shared'
 import { getAssignmentType } from '@/lib/canvas-shared'
 import CalendarHeatmap from './CalendarHeatmap'
@@ -26,6 +26,7 @@ interface DateGroup {
   sublabel: string
   isToday: boolean
   isTomorrow: boolean
+  isPast: boolean
   assignments: CanvasAssignment[]
 }
 
@@ -41,11 +42,13 @@ function typeBadgeClass(type: ReturnType<typeof getAssignmentType>) {
 function AssignmentRow({
   assignment,
   isCompleted,
+  isPast,
   onToggleComplete,
   onDetail,
 }: {
   assignment: CanvasAssignment
   isCompleted: boolean
+  isPast: boolean
   onToggleComplete: () => void
   onDetail: () => void
 }) {
@@ -56,7 +59,7 @@ function AssignmentRow({
   return (
     <div
       className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800/60 last:border-b-0 group transition-colors hover:bg-gray-50 dark:hover:bg-gray-900 ${
-        isCompleted ? 'opacity-50' : ''
+        isCompleted || isPast ? 'opacity-50' : ''
       }`}
     >
       <button
@@ -113,9 +116,11 @@ function DashboardTab({
 }) {
   const [completedIds, setCompletedIds] = useState<Set<number>>(new Set())
   const [plannedDates, setPlannedDates] = useState<Record<number, string>>({})
-  const [showCompleted, setShowCompleted] = useState(false)
   const [detailAssignment, setDetailAssignment] = useState<CanvasAssignment | null>(null)
   const [filterCourse, setFilterCourse] = useState<string>('')
+  const todayAnchorRef = useRef<HTMLDivElement | null>(null)
+  const hasScrolledRef = useRef(false)
+  const [returnArrow, setReturnArrow] = useState<'up' | 'down' | null>(null)
 
   useEffect(() => {
     try {
@@ -160,15 +165,14 @@ function DashboardTab({
     today.setHours(0, 0, 0, 0)
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
     const todayStr = toDateStr(today)
     const tomorrowStr = toDateStr(tomorrow)
+    const yesterdayStr = toDateStr(yesterday)
 
     const filtered = assignments.filter((a) => {
-      const eff = new Date(effectiveDate(a))
-      eff.setHours(0, 0, 0, 0)
-      if (eff.getTime() < today.getTime()) return false
       if (filterCourse && a.courseCode !== filterCourse) return false
-      if (!showCompleted && completedIds.has(a.id)) return false
       return true
     })
 
@@ -191,23 +195,82 @@ function DashboardTab({
     for (const [key, items] of map) {
       const isToday = key === todayStr
       const isTomorrow = key === tomorrowStr
+      const isYesterday = key === yesterdayStr
+      const isPast = key < todayStr
       const date = parseDateStr(key)
-      const label = isToday ? 'Today' : isTomorrow ? 'Tomorrow' : date.toLocaleDateString('en-US', { weekday: 'long' })
+      const label = isToday
+        ? 'Today'
+        : isTomorrow
+        ? 'Tomorrow'
+        : isYesterday
+        ? 'Yesterday'
+        : date.toLocaleDateString('en-US', { weekday: 'long' })
       const sublabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      result.push({ key, label, sublabel, isToday, isTomorrow, assignments: items })
+      result.push({ key, label, sublabel, isToday, isTomorrow, isPast, assignments: items })
     }
     return result
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignments, plannedDates, completedIds, showCompleted, filterCourse])
+  }, [assignments, plannedDates, filterCourse])
 
-  const totalVisible = groups.reduce((n, g) => n + g.assignments.length, 0)
+  const upcomingCount = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    return groups.reduce(
+      (n, g) => n + (g.isPast ? 0 : g.assignments.length),
+      0,
+    )
+  }, [groups])
   const totalCompleted = assignments.filter((a) => completedIds.has(a.id)).length
+
+  // Land on Today (or the first non-past group) on mount, so the user can
+  // scroll up to past dates like Canvas Planner.
+  useEffect(() => {
+    if (hasScrolledRef.current) return
+    if (groups.length === 0) return
+    const target = todayAnchorRef.current
+    if (!target) return
+    hasScrolledRef.current = true
+    requestAnimationFrame(() => {
+      target.scrollIntoView({ block: 'start' })
+    })
+  }, [groups])
+
+  const todayAnchorKey = useMemo(() => {
+    const firstUpcoming = groups.find((g) => !g.isPast)
+    return firstUpcoming?.key ?? null
+  }, [groups])
+
+  // Show a floating "Today" button whenever the anchor is off-screen; the
+  // arrow points in the direction the user needs to scroll to reach it.
+  useEffect(() => {
+    const target = todayAnchorRef.current
+    if (!target) {
+      setReturnArrow(null)
+      return
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setReturnArrow(null)
+        } else {
+          setReturnArrow(entry.boundingClientRect.top < 0 ? 'up' : 'down')
+        }
+      },
+      { threshold: 0 },
+    )
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [todayAnchorKey])
+
+  function scrollToToday() {
+    todayAnchorRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <p className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
-          {totalVisible} upcoming
+          {upcomingCount} upcoming
           {totalCompleted > 0 && <span className="ml-2 text-gray-300 dark:text-gray-600">· {totalCompleted} completed</span>}
         </p>
 
@@ -221,45 +284,41 @@ function DashboardTab({
             {courses.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         )}
-
-        {totalCompleted > 0 && (
-          <button
-            onClick={() => setShowCompleted((v) => !v)}
-            className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-          >
-            {showCompleted ? 'Hide completed' : 'Show completed'}
-          </button>
-        )}
       </div>
 
       {groups.length === 0 ? (
         <div className="border border-dashed border-gray-200 dark:border-gray-800 py-16 text-center">
-          {totalCompleted > 0 && !showCompleted ? (
-            <>
-              <p className="text-sm text-gray-500 dark:text-gray-400">All caught up.</p>
-              <button onClick={() => setShowCompleted(true)} className="mt-2 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-                Show {totalCompleted} completed →
-              </button>
-            </>
-          ) : (
-            <p className="text-sm text-gray-500 dark:text-gray-400">No upcoming assignments.</p>
-          )}
+          <p className="text-sm text-gray-500 dark:text-gray-400">No assignments to show.</p>
         </div>
       ) : (
         <div className="border border-gray-200 dark:border-gray-800 divide-y divide-gray-100 dark:divide-gray-800">
           {groups.map((group) => (
-            <div key={group.key}>
+            <div key={group.key} ref={group.key === todayAnchorKey ? todayAnchorRef : undefined}>
               <div className={`flex items-baseline gap-2 px-4 py-2.5 ${
                 group.isToday
                   ? 'bg-gray-900 dark:bg-gray-700'
                   : group.isTomorrow
                   ? 'bg-gray-100 dark:bg-gray-800'
+                  : group.isPast
+                  ? 'bg-gray-50/60 dark:bg-gray-900/40'
                   : 'bg-gray-50 dark:bg-gray-900'
               }`}>
-                <span className={`text-xs font-medium ${group.isToday ? 'text-white' : 'text-gray-700 dark:text-gray-200'}`}>
+                <span className={`text-xs font-medium ${
+                  group.isToday
+                    ? 'text-white'
+                    : group.isPast
+                    ? 'text-gray-400 dark:text-gray-500'
+                    : 'text-gray-700 dark:text-gray-200'
+                }`}>
                   {group.label}
                 </span>
-                <span className={`text-[11px] ${group.isToday ? 'text-gray-400 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500'}`}>
+                <span className={`text-[11px] ${
+                  group.isToday
+                    ? 'text-gray-400 dark:text-gray-300'
+                    : group.isPast
+                    ? 'text-gray-300 dark:text-gray-600'
+                    : 'text-gray-400 dark:text-gray-500'
+                }`}>
                   {group.sublabel}
                 </span>
                 <span className={`ml-auto text-[10px] ${group.isToday ? 'text-gray-500 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600'}`}>
@@ -272,6 +331,7 @@ function DashboardTab({
                     key={a.id}
                     assignment={a}
                     isCompleted={completedIds.has(a.id)}
+                    isPast={group.isPast}
                     onToggleComplete={() => toggleComplete(a.id)}
                     onDetail={() => setDetailAssignment(a)}
                   />
@@ -298,6 +358,19 @@ function DashboardTab({
           onMove={() => { setDetailAssignment(null); onSwitchToEdit() }}
           onClose={() => setDetailAssignment(null)}
         />
+      )}
+
+      {returnArrow && (
+        <button
+          onClick={scrollToToday}
+          aria-label="Return to today"
+          title="Return to today"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center justify-center w-9 h-9 rounded-full bg-white/90 dark:bg-gray-900/90 backdrop-blur border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:border-gray-400 dark:hover:border-gray-500 shadow-sm transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden style={{ transform: returnArrow === 'down' ? 'rotate(180deg)' : undefined }}>
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </button>
       )}
     </>
   )

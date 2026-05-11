@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import WelcomeModal, { WELCOME_STORAGE_KEY } from '@/components/WelcomeModal'
 
 function LoginContent() {
   const [token, setToken] = useState('')
@@ -9,9 +10,27 @@ function LoginContent() {
   const [loading, setLoading] = useState(false)
   const [confirmGuestOpen, setConfirmGuestOpen] = useState(false)
   const [guestLoading, setGuestLoading] = useState(false)
+  const [welcomeOpen, setWelcomeOpen] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const fromSettings = searchParams.get('from') === 'settings'
+
+  useEffect(() => {
+    if (fromSettings) return
+    try {
+      if (!localStorage.getItem(WELCOME_STORAGE_KEY)) setWelcomeOpen(true)
+    } catch {}
+  }, [fromSettings])
+
+  function closeWelcome() {
+    try { localStorage.setItem(WELCOME_STORAGE_KEY, '1') } catch {}
+    setWelcomeOpen(false)
+  }
+
+  function handleExploreAsGuest() {
+    closeWelcome()
+    setConfirmGuestOpen(true)
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -81,6 +100,16 @@ function LoginContent() {
           </svg>
         </button>
       )}
+
+      <button
+        type="button"
+        onClick={() => setWelcomeOpen(true)}
+        className="absolute top-5 right-5 flex items-center justify-center w-7 h-7 rounded-full border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-100 hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
+        aria-label="What is this site?"
+        title="What is this site?"
+      >
+        <span className="text-xs font-light">?</span>
+      </button>
 
       <div className="w-full max-w-sm">
         {/* Header */}
@@ -184,6 +213,12 @@ function LoginContent() {
           </div>
         </details>
       </div>
+
+      <WelcomeModal
+        open={welcomeOpen}
+        onClose={closeWelcome}
+        onExploreAsGuest={handleExploreAsGuest}
+      />
 
       {confirmGuestOpen && (
         <>
