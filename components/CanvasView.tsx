@@ -306,6 +306,10 @@ function DashboardTab({
     )
   }, [groups])
   const totalCompleted = assignments.filter((a) => completedIds.has(a.id)).length
+  const submittedCount = useMemo(
+    () => assignments.filter((a) => isAssignmentSubmitted(a) && (!filterCourse || a.courseCode === filterCourse)).length,
+    [assignments, filterCourse],
+  )
 
   // Planner-style stat counts. Excludes assignments already submitted or
   // locally marked complete so it always reflects work remaining.
@@ -457,7 +461,9 @@ function DashboardTab({
           }`}
           aria-pressed={hideSubmitted}
         >
-          {hideSubmitted ? 'Submitted hidden' : 'Hide submitted'}
+          {hideSubmitted
+            ? submittedCount > 0 ? `Submitted hidden (${submittedCount})` : 'Submitted hidden'
+            : 'Hide submitted'}
         </button>
       </div>
 
