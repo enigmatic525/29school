@@ -424,11 +424,13 @@ function DashboardTab({
     todayAnchorRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
 
-  // Keyboard shortcuts. `/` focuses search, `t` jumps to today. Both are
-  // ignored if focus is inside a text field so they don't hijack typing.
+  // Keyboard shortcuts. `/` focuses search, `t` jumps to today. Skipped
+  // while a text field is focused or a modal is open so they don't hijack
+  // typing or steal focus from elements visible to the user.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey) return
+      if (detailAssignment) return
       const tag = (e.target as HTMLElement | null)?.tagName
       const editable =
         tag === 'INPUT' ||
@@ -446,7 +448,7 @@ function DashboardTab({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [detailAssignment])
 
   return (
     <>

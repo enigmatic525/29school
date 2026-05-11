@@ -252,16 +252,6 @@ function MonthCalendar({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignments, plannedDates])
 
-  function handleDrop(day: Date, id: number) {
-    const a = assignments.find((x) => x.id === id)
-    if (!a) return
-    const target = new Date(day)
-    target.setHours(12, 0, 0, 0)
-    if (target > new Date(a.due_at!)) return
-    // direct import of outer setPlannedDate not available here — handled via prop
-    onMove({ ...a, _dropTarget: toDateStr(day) } as CanvasAssignment & { _dropTarget: string })
-  }
-
   function typeBg(type: ReturnType<typeof getAssignmentType>) {
     if (type === 'ma') return 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-300'
     if (type === 'qa') return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'
