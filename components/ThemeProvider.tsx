@@ -27,11 +27,11 @@ function applyResolved(theme: Theme): 'light' | 'dark' {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>('system')
+  const [theme, setThemeState] = useState<Theme>('light')
   const [resolved, setResolved] = useState<'light' | 'dark'>('light')
 
   useEffect(() => {
-    let initial: Theme = 'system'
+    let initial: Theme = 'light'
     try {
       const raw = localStorage.getItem(THEME_STORAGE_KEY)
       if (raw === 'light' || raw === 'dark' || raw === 'system') initial = raw
@@ -41,11 +41,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
     const onChange = () => {
-      // Only react when in system mode
+      // Only react when explicitly in system mode
       try {
         const raw = localStorage.getItem(THEME_STORAGE_KEY)
-        if (raw && raw !== 'system') return
-      } catch {}
+        if (raw !== 'system') return
+      } catch { return }
       setResolved(applyResolved('system'))
     }
     mq.addEventListener('change', onChange)
@@ -77,7 +77,7 @@ export const themeInitScript = `
 (function(){try{
   var k='${THEME_STORAGE_KEY}';
   var t=localStorage.getItem(k);
-  if(t!=='light'&&t!=='dark'&&t!=='system') t='system';
+  if(t!=='light'&&t!=='dark'&&t!=='system') t='light';
   var d = t==='dark' || (t==='system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   var c = document.documentElement.classList;
   if(d) c.add('dark'); else c.remove('dark');

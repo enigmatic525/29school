@@ -143,59 +143,6 @@ function AssignmentRow({
   )
 }
 
-// ─── Stat card ────────────────────────────────────────────────────────────────
-
-function StatCard({
-  label,
-  count,
-  tone = 'default',
-  active = false,
-  onClick,
-}: {
-  label: string
-  count: number
-  tone?: 'default' | 'red'
-  active?: boolean
-  onClick?: () => void
-}) {
-  const isRed = tone === 'red'
-  const baseBorder = active
-    ? 'border-gray-700 dark:border-gray-300'
-    : isRed
-    ? 'border-red-200 dark:border-red-900/60'
-    : 'border-gray-200 dark:border-gray-800'
-  const bg = isRed
-    ? 'bg-red-50 dark:bg-red-950/30'
-    : active
-    ? 'bg-gray-100 dark:bg-gray-800/60'
-    : 'bg-gray-50 dark:bg-gray-900/40'
-  const cls = `border ${baseBorder} ${bg} px-3 py-2 flex flex-col text-left transition-colors ${
-    onClick ? 'hover:border-gray-500 dark:hover:border-gray-500 cursor-pointer' : ''
-  }`
-  const inner = (
-    <>
-      <span className={`text-[10px] uppercase tracking-wider ${
-        isRed ? 'text-red-500 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'
-      }`}>
-        {label}
-      </span>
-      <span className={`text-lg font-light leading-tight ${
-        isRed ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-gray-100'
-      }`}>
-        {count}
-      </span>
-    </>
-  )
-  if (onClick) {
-    return (
-      <button type="button" onClick={onClick} aria-pressed={active} className={cls}>
-        {inner}
-      </button>
-    )
-  }
-  return <div className={cls}>{inner}</div>
-}
-
 // ─── Dashboard tab (upcoming) ─────────────────────────────────────────────────
 
 function DashboardTab({
@@ -211,7 +158,6 @@ function DashboardTab({
   const [filterCourse, setFilterCourse] = useState<string>('')
   const [search, setSearch] = useState<string>('')
   const [hideSubmitted, setHideSubmitted] = useState(false)
-  const [quickRange, setQuickRange] = useState<'all' | 'today' | 'tomorrow' | 'week' | 'overdue'>('all')
   const todayAnchorRef = useRef<HTMLDivElement | null>(null)
   const hasScrolledRef = useRef(false)
   const [returnArrow, setReturnArrow] = useState<'up' | 'down' | null>(null)
@@ -286,21 +232,10 @@ function DashboardTab({
     const yesterdayStr = toDateStr(yesterday)
 
     const q = search.trim().toLowerCase()
-    const weekEnd = new Date(today)
-    weekEnd.setDate(weekEnd.getDate() + 7)
     const filtered = assignments.filter((a) => {
       if (filterCourse && a.courseCode !== filterCourse) return false
       if (q && !a.name.toLowerCase().includes(q) && !(a.courseCode ?? '').toLowerCase().includes(q)) return false
       if (hideSubmitted && isAssignmentSubmitted(a)) return false
-      if (quickRange !== 'all') {
-        const eff = new Date(effectiveDate(a))
-        eff.setHours(0, 0, 0, 0)
-        const t = eff.getTime()
-        if (quickRange === 'today' && t !== today.getTime()) return false
-        if (quickRange === 'tomorrow' && t !== tomorrow.getTime()) return false
-        if (quickRange === 'week' && (t < today.getTime() || t >= weekEnd.getTime())) return false
-        if (quickRange === 'overdue' && (t >= today.getTime() || isAssignmentSubmitted(a) || completedIds.has(a.id))) return false
-      }
       return true
     })
 
@@ -338,7 +273,7 @@ function DashboardTab({
     }
     return result
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignments, plannedDates, filterCourse, search, hideSubmitted, quickRange, completedIds])
+  }, [assignments, plannedDates, filterCourse, search, hideSubmitted, completedIds])
 
   const upcomingCount = useMemo(() => {
     return groups.reduce(
@@ -351,34 +286,6 @@ function DashboardTab({
     () => assignments.filter((a) => isAssignmentSubmitted(a) && (!filterCourse || a.courseCode === filterCourse)).length,
     [assignments, filterCourse],
   )
-
-  // Planner-style stat counts. Excludes assignments already submitted or
-  // locally marked complete so it always reflects work remaining.
-  const summary = useMemo(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const endOfWeek = new Date(today)
-    endOfWeek.setDate(endOfWeek.getDate() + 7)
-    let dueToday = 0
-    let dueTomorrow = 0
-    let thisWeek = 0
-    let overdue = 0
-    for (const a of assignments) {
-      if (isAssignmentSubmitted(a)) continue
-      if (completedIds.has(a.id)) continue
-      const eff = new Date(effectiveDate(a))
-      eff.setHours(0, 0, 0, 0)
-      const t = eff.getTime()
-      if (t === today.getTime()) dueToday++
-      else if (t === tomorrow.getTime()) dueTomorrow++
-      if (eff >= today && eff < endOfWeek) thisWeek++
-      if (t < today.getTime()) overdue++
-    }
-    return { dueToday, dueTomorrow, thisWeek, overdue }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignments, plannedDates, completedIds])
 
   // Land on Today (or the first non-past group) on mount, so the user can
   // scroll up to past dates like Canvas Planner.
@@ -452,34 +359,6 @@ function DashboardTab({
 
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-        <StatCard
-          label="Due today"
-          count={summary.dueToday}
-          active={quickRange === 'today'}
-          onClick={() => setQuickRange((v) => (v === 'today' ? 'all' : 'today'))}
-        />
-        <StatCard
-          label="Tomorrow"
-          count={summary.dueTomorrow}
-          active={quickRange === 'tomorrow'}
-          onClick={() => setQuickRange((v) => (v === 'tomorrow' ? 'all' : 'tomorrow'))}
-        />
-        <StatCard
-          label="This week"
-          count={summary.thisWeek}
-          active={quickRange === 'week'}
-          onClick={() => setQuickRange((v) => (v === 'week' ? 'all' : 'week'))}
-        />
-        <StatCard
-          label="Overdue"
-          count={summary.overdue}
-          tone={summary.overdue > 0 ? 'red' : 'default'}
-          active={quickRange === 'overdue'}
-          onClick={() => setQuickRange((v) => (v === 'overdue' ? 'all' : 'overdue'))}
-        />
-      </div>
-
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <p className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
           {upcomingCount} upcoming
@@ -534,11 +413,11 @@ function DashboardTab({
       {groups.length === 0 ? (
         <div className="border border-dashed border-gray-200 dark:border-gray-800 py-16 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {search || filterCourse || hideSubmitted || quickRange !== 'all' ? 'No assignments match your filters.' : 'No assignments to show.'}
+            {search || filterCourse || hideSubmitted ? 'No assignments match your filters.' : 'No assignments to show.'}
           </p>
-          {(search || filterCourse || hideSubmitted || quickRange !== 'all') && (
+          {(search || filterCourse || hideSubmitted) && (
             <button
-              onClick={() => { setSearch(''); setFilterCourse(''); setHideSubmitted(false); setQuickRange('all') }}
+              onClick={() => { setSearch(''); setFilterCourse(''); setHideSubmitted(false) }}
               className="mt-2 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
             >
               Clear filters →
