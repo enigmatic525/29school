@@ -84,4 +84,33 @@ export interface CourseGrade {
   courseCode: string
   currentScore: number | null
   currentGrade: string | null
+  // Mirrors Canvas's apply_assignment_group_weights — lets the What-If calculator
+  // skip a per-course Canvas fetch.
+  useWeights: boolean
+}
+
+export interface GradeAssignment {
+  id: number
+  name: string
+  score: number | null
+  pointsPossible: number
+  // 'graded' means score is the real teacher-entered score; 'unsubmitted'/null means
+  // it's hypothetical-only territory in the calculator.
+  state: 'graded' | 'submitted' | 'pending_review' | 'unsubmitted' | null
+  htmlUrl: string | null
+}
+
+export interface AssignmentGroupSummary {
+  id: number
+  name: string
+  weight: number
+  dropLowest: number
+  dropHighest: number
+  assignments: GradeAssignment[]
+}
+
+export interface CourseGradeBreakdown {
+  courseId: number
+  useWeights: boolean
+  groups: AssignmentGroupSummary[]
 }

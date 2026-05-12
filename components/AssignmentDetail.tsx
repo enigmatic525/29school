@@ -195,10 +195,6 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
               <p className="text-sm font-light text-gray-500 dark:text-gray-400">
                 Submitted — your work has been sent to Canvas.
               </p>
-            ) : assignment.submittedAt ? (
-              <p className="text-sm font-light text-gray-500 dark:text-gray-400">
-                You&apos;ve already submitted this assignment. Open it in Canvas to resubmit if your teacher allows it.
-              </p>
             ) : !canSubmit ? (
               <p className="text-sm font-light text-gray-500 dark:text-gray-400">
                 {assignment.is_quiz_assignment

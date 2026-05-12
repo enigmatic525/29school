@@ -1,7 +1,12 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import type { CourseGrade, GradedSubmission } from '@/lib/canvas-shared'
+import type {
+  AssignmentGroupSummary,
+  CourseGrade,
+  CourseGradeBreakdown,
+  GradedSubmission,
+} from '@/lib/canvas-shared'
 import { getAssignmentType } from '@/lib/canvas-shared'
 import { courseColor } from '@/lib/course-colors'
 
@@ -54,9 +59,8 @@ function safeHref(raw: string | null | undefined): string | null {
 
 // ─── Grades tab ──────────────────────────────────────────────────────────────
 
-function GradesTab({ grades }: { grades: CourseGrade[] }) {
+function useHiddenIds(): [Set<number>, (id: number) => void, () => void] {
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set())
-  const [editMode, setEditMode] = useState(false)
 
   useEffect(() => {
     try {
@@ -79,6 +83,99 @@ function GradesTab({ grades }: { grades: CourseGrade[] }) {
     setHiddenIds(new Set())
     try { localStorage.removeItem(LS_KEY) } catch {}
   }
+
+  return [hiddenIds, toggleHide, showAll]
+}
+
+function GradeCourseRow({ grade }: { grade: CourseGrade }) {
+  const [open, setOpen] = useState(false)
+  const color = courseColor(grade.courseCode)
+  // Fire-and-forget — already-cached promises are no-ops.
+  const prefetch = () => { void prefetchBreakdown(grade).catch(() => {}) }
+  return (
+    <div className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 relative">
+      <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-sm ${color.dot}`} aria-hidden />
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        onMouseEnter={prefetch}
+        onFocus={prefetch}
+        onTouchStart={prefetch}
+        className="w-full px-5 py-4 text-left hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+        aria-expanded={open}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-light text-gray-900 dark:text-gray-100 leading-snug truncate">{grade.courseName}</p>
+            <p className={`text-[11px] mt-0.5 ${color.text}`}>{grade.courseCode}</p>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
+            <div className="text-right">
+              {grade.currentGrade ? (
+                <p className={`text-2xl font-light leading-none ${gradeColor(grade.currentScore)}`}>
+                  {grade.currentGrade}
+                </p>
+              ) : (
+                <p className="text-2xl font-light leading-none text-gray-300 dark:text-gray-700">—</p>
+              )}
+              {grade.currentScore !== null && (
+                <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{grade.currentScore.toFixed(1)}%</p>
+              )}
+            </div>
+            <span
+              aria-hidden
+              className={`text-gray-400 dark:text-gray-500 transition-transform ${open ? 'rotate-90' : ''}`}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </span>
+          </div>
+        </div>
+        <div className="h-0.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mt-3">
+          <div
+            className={`h-full rounded-full transition-all ${barColor(grade.currentScore)}`}
+            style={{ width: `${grade.currentScore !== null ? Math.min(100, Math.max(0, grade.currentScore)) : 0}%` }}
+          />
+        </div>
+      </button>
+      {open && (
+        <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-4 bg-gray-50/60 dark:bg-gray-900/40">
+          <GradeCalculator course={grade} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GradesTab({ grades, hiddenIds }: { grades: CourseGrade[]; hiddenIds: Set<number> }) {
+  // After paint, quietly prefetch every visible course's breakdown so any click
+  // lands instantly. requestIdleCallback when available keeps us out of the way
+  // of higher-priority work; falls back to a short setTimeout otherwise.
+  useEffect(() => {
+    const visibleCourses = grades.filter((g) => !hiddenIds.has(g.courseId))
+    type IdleHandle = number
+    let handle: IdleHandle | null = null
+    const win = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => IdleHandle
+      cancelIdleCallback?: (id: IdleHandle) => void
+    }
+    const run = () => {
+      for (const c of visibleCourses) {
+        void prefetchBreakdown(c).catch(() => {})
+      }
+    }
+    if (typeof win.requestIdleCallback === 'function') {
+      handle = win.requestIdleCallback(run, { timeout: 1500 })
+    } else {
+      handle = window.setTimeout(run, 200)
+    }
+    return () => {
+      if (handle === null) return
+      if (typeof win.cancelIdleCallback === 'function') win.cancelIdleCallback(handle)
+      else window.clearTimeout(handle)
+    }
+  }, [grades, hiddenIds])
 
   const visible = grades.filter((g) => !hiddenIds.has(g.courseId))
   const sorted = [...visible].sort((a, b) => {
@@ -104,83 +201,109 @@ function GradesTab({ grades }: { grades: CourseGrade[] }) {
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-2">
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          {visible.length} course{visible.length !== 1 ? 's' : ''}
-          {hiddenIds.size > 0 && (
-            <button onClick={showAll} className="ml-2 text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-              · show {hiddenIds.size} hidden
-            </button>
-          )}
-        </p>
-        <button
-          onClick={() => setEditMode((v) => !v)}
-          className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
-        >
-          {editMode ? 'Done' : 'Edit'}
-        </button>
-      </div>
+      <p className="text-xs text-gray-400 dark:text-gray-500 mb-2">
+        {visible.length} course{visible.length !== 1 ? 's' : ''}
+        {hiddenIds.size > 0 && (
+          <span className="ml-2 text-gray-400 dark:text-gray-500">· {hiddenIds.size} hidden (Selection)</span>
+        )}
+      </p>
 
       <div className="flex flex-col gap-2">
-        {sorted.map((grade) => {
-          const color = courseColor(grade.courseCode)
-          return (
-          <div key={grade.courseId} className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-5 py-4 relative">
-            <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-sm ${color.dot}`} aria-hidden />
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-light text-gray-900 dark:text-gray-100 leading-snug truncate">{grade.courseName}</p>
-                <p className={`text-[11px] mt-0.5 ${color.text}`}>{grade.courseCode}</p>
-              </div>
-              <div className="shrink-0 flex items-center gap-3">
-                <div className="text-right">
-                  {grade.currentGrade ? (
-                    <p className={`text-2xl font-light leading-none ${gradeColor(grade.currentScore)}`}>
-                      {grade.currentGrade}
-                    </p>
-                  ) : (
-                    <p className="text-2xl font-light leading-none text-gray-300 dark:text-gray-700">—</p>
-                  )}
-                  {grade.currentScore !== null && (
-                    <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-1">{grade.currentScore.toFixed(1)}%</p>
-                  )}
-                </div>
-                {editMode && (
-                  <button
-                    onClick={() => toggleHide(grade.courseId)}
-                    className="text-[11px] text-gray-400 dark:text-gray-500 border border-gray-200 dark:border-gray-700 px-2 py-1 hover:border-red-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:border-red-900 dark:hover:text-red-400 transition-colors"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            </div>
-            <div className="h-0.5 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mt-3">
-              <div
-                className={`h-full rounded-full transition-all ${barColor(grade.currentScore)}`}
-                style={{ width: `${grade.currentScore !== null ? Math.min(100, Math.max(0, grade.currentScore)) : 0}%` }}
-              />
-            </div>
-          </div>
-          )
-        })}
+        {sorted.map((grade) => (
+          <GradeCourseRow key={grade.courseId} grade={grade} />
+        ))}
       </div>
 
       {sorted.length === 0 && (
         <div className="border border-dashed border-gray-300 dark:border-gray-700 p-10 text-center">
           <p className="text-sm text-gray-400 dark:text-gray-500">All courses hidden.</p>
-          <button onClick={showAll} className="mt-2 text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
-            Show all →
-          </button>
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Use the Selection tab to show them again.</p>
         </div>
       )}
 
       <p className="mt-5 text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
-        GPA is calculated as an unweighted average of current letter grades. Grades shown are current
-        grades from Canvas and may not reflect recent submissions.{' '}
-        Your information is stored on your computer and is not accessible to me or anyone else.
+        Click a course to test how different scores would change your grade. GPA is calculated as an
+        unweighted average of current letter grades. Your information is stored on your computer and is
+        not accessible to me or anyone else.
       </p>
     </>
+  )
+}
+
+// ─── Selection tab ───────────────────────────────────────────────────────────
+
+function SelectionTab({
+  grades,
+  hiddenIds,
+  toggleHide,
+  showAll,
+}: {
+  grades: CourseGrade[]
+  hiddenIds: Set<number>
+  toggleHide: (id: number) => void
+  showAll: () => void
+}) {
+  const sorted = [...grades].sort((a, b) => a.courseName.localeCompare(b.courseName))
+
+  if (grades.length === 0) {
+    return (
+      <div className="border border-dashed border-gray-200 dark:border-gray-800 py-16 text-center">
+        <p className="text-sm text-gray-500 dark:text-gray-400">No courses available.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          Choose which courses appear in Grades. {grades.length - hiddenIds.size} of {grades.length} shown.
+        </p>
+        {hiddenIds.size > 0 && (
+          <button
+            onClick={showAll}
+            className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+          >
+            Show all
+          </button>
+        )}
+      </div>
+      {sorted.map((grade) => {
+        const color = courseColor(grade.courseCode)
+        const hidden = hiddenIds.has(grade.courseId)
+        return (
+          <button
+            key={grade.courseId}
+            onClick={() => toggleHide(grade.courseId)}
+            className={`border bg-white dark:bg-gray-950 px-5 py-3 text-left transition-colors relative ${
+              hidden
+                ? 'border-gray-200 dark:border-gray-800 opacity-50 hover:opacity-100'
+                : 'border-gray-200 dark:border-gray-800 hover:border-gray-400 dark:hover:border-gray-600'
+            }`}
+            aria-pressed={!hidden}
+          >
+            <span className={`absolute left-0 top-2 bottom-2 w-1 rounded-r-sm ${color.dot}`} aria-hidden />
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-light leading-snug truncate ${hidden ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
+                  {grade.courseName}
+                </p>
+                <p className={`text-[11px] mt-0.5 ${color.text}`}>{grade.courseCode}</p>
+              </div>
+              <span
+                className={`shrink-0 text-[11px] px-2 py-1 border transition-colors ${
+                  hidden
+                    ? 'border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500'
+                    : 'border-gray-900 dark:border-gray-100 text-gray-900 dark:text-gray-100'
+                }`}
+              >
+                {hidden ? 'Hidden' : 'Shown'}
+              </span>
+            </div>
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -418,6 +541,317 @@ function UpdatesTab({ recentGrades }: { recentGrades: GradedSubmission[] }) {
   )
 }
 
+// ─── What-If tab ─────────────────────────────────────────────────────────────
+
+// Per-group percent: sum(score) / sum(points_possible). Ungraded assignments (score === null)
+// don't contribute on either side, so adding a hypothetical score to one of them counts it in.
+// Drop rules are NOT applied — show a hint instead so users know their real grade may differ.
+function groupPercent(
+  group: AssignmentGroupSummary,
+  overrides: Record<number, number | null>,
+): { pct: number | null; counted: number } {
+  let earned = 0
+  let possible = 0
+  let counted = 0
+  for (const a of group.assignments) {
+    const override = overrides[a.id]
+    const score = override !== undefined ? override : a.score
+    if (score === null || score === undefined) continue
+    earned += score
+    possible += a.pointsPossible
+    counted += 1
+  }
+  if (possible <= 0) return { pct: null, counted: 0 }
+  return { pct: (earned / possible) * 100, counted }
+}
+
+function projectedTotal(
+  breakdown: CourseGradeBreakdown,
+  overrides: Record<number, number | null>,
+): number | null {
+  if (breakdown.useWeights) {
+    let weightedSum = 0
+    let weightUsed = 0
+    for (const g of breakdown.groups) {
+      const { pct } = groupPercent(g, overrides)
+      if (pct === null) continue
+      weightedSum += pct * g.weight
+      weightUsed += g.weight
+    }
+    if (weightUsed <= 0) return null
+    return weightedSum / weightUsed
+  }
+  let earned = 0
+  let possible = 0
+  for (const g of breakdown.groups) {
+    for (const a of g.assignments) {
+      const override = overrides[a.id]
+      const score = override !== undefined ? override : a.score
+      if (score === null || score === undefined) continue
+      earned += score
+      possible += a.pointsPossible
+    }
+  }
+  return possible > 0 ? (earned / possible) * 100 : null
+}
+
+// Module-scoped caches survive component unmount, so collapsing and reopening a
+// course dropdown is free — and so are repeat opens after the eager prefetch on
+// page mount. Promises are stored (not values) so concurrent callers dedupe.
+const breakdownCache = new Map<number, Promise<CourseGradeBreakdown | null>>()
+const overridesCache = new Map<number, Record<number, number | null>>()
+
+function prefetchBreakdown(course: CourseGrade): Promise<CourseGradeBreakdown | null> {
+  const existing = breakdownCache.get(course.courseId)
+  if (existing) return existing
+  const params = new URLSearchParams({
+    courseId: String(course.courseId),
+    useWeights: course.useWeights ? '1' : '0',
+  })
+  const promise = fetch(`/api/grade-breakdown?${params}`)
+    .then(async (res) => {
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`)
+      return res.json() as Promise<CourseGradeBreakdown>
+    })
+    .catch((e) => {
+      // Drop the failed promise so a retry can fire fresh next time.
+      breakdownCache.delete(course.courseId)
+      throw e
+    })
+  breakdownCache.set(course.courseId, promise)
+  return promise
+}
+
+function parseScoreInput(raw: string): number | null | 'invalid' {
+  const trimmed = raw.trim()
+  if (trimmed === '') return null
+  const n = Number(trimmed)
+  if (!Number.isFinite(n) || n < 0) return 'invalid'
+  return n
+}
+
+function ScoreInput({
+  assignmentId,
+  pointsPossible,
+  originalScore,
+  override,
+  onChange,
+}: {
+  assignmentId: number
+  pointsPossible: number
+  originalScore: number | null
+  override: number | null | undefined
+  onChange: (id: number, value: number | null | undefined) => void
+}) {
+  const display =
+    override !== undefined
+      ? override === null ? '' : String(override)
+      : originalScore !== null ? String(originalScore) : ''
+  const edited = override !== undefined
+  return (
+    <div className="flex items-center gap-1.5">
+      <input
+        type="text"
+        inputMode="decimal"
+        value={display}
+        onChange={(e) => {
+          const parsed = parseScoreInput(e.target.value)
+          if (parsed === 'invalid') return
+          onChange(assignmentId, parsed)
+        }}
+        placeholder="—"
+        className={`w-14 border bg-white dark:bg-gray-900 px-2 py-1 text-xs font-light text-right text-gray-900 dark:text-gray-100 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 ${
+          edited
+            ? 'border-amber-400 dark:border-amber-500'
+            : 'border-gray-200 dark:border-gray-700'
+        }`}
+      />
+      <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">/ {pointsPossible}</span>
+    </div>
+  )
+}
+
+function GradeCalculator({ course }: { course: CourseGrade }) {
+  const [breakdown, setBreakdown] = useState<CourseGradeBreakdown | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [overrides, setOverrides] = useState<Record<number, number | null>>(
+    () => overridesCache.get(course.courseId) ?? {},
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    setError(null)
+    // Skip the loading flash if the prefetch already populated the cache.
+    setLoading(!breakdownCache.has(course.courseId))
+    prefetchBreakdown(course)
+      .then((data) => {
+        if (cancelled) return
+        setBreakdown(data)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setError(e instanceof Error ? e.message : 'Failed to load')
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [course])
+
+  const sortedGroups = useMemo(() => {
+    if (!breakdown) return []
+    return [...breakdown.groups].sort((a, b) => b.weight - a.weight)
+  }, [breakdown])
+
+  const totalWeight = useMemo(() => {
+    if (!breakdown) return 0
+    return breakdown.groups.reduce((sum, g) => sum + g.weight, 0)
+  }, [breakdown])
+
+  const projected = breakdown ? projectedTotal(breakdown, overrides) : null
+  const original = course.currentScore
+  const delta = projected !== null && original !== null ? projected - original : null
+  const edited = Object.keys(overrides).length > 0
+  const hasDropRules = breakdown?.groups.some((g) => g.dropLowest > 0 || g.dropHighest > 0) ?? false
+
+  function setOverride(id: number, value: number | null | undefined) {
+    setOverrides((prev) => {
+      const next = { ...prev }
+      if (value === undefined) delete next[id]
+      else next[id] = value
+      if (Object.keys(next).length === 0) overridesCache.delete(course.courseId)
+      else overridesCache.set(course.courseId, next)
+      return next
+    })
+  }
+
+  if (loading) {
+    return <p className="text-xs text-gray-400 dark:text-gray-500 py-8 text-center">Loading…</p>
+  }
+  if (error) {
+    return <p className="text-xs text-red-500 py-8 text-center">{error}</p>
+  }
+  if (!breakdown || breakdown.groups.length === 0) {
+    return <p className="text-xs text-gray-400 dark:text-gray-500 py-8 text-center">No grade categories yet.</p>
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Totals header */}
+      <div className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-5 py-4 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">
+            {edited ? 'What-If' : 'Projected'} total
+          </p>
+          <p className={`text-3xl font-light leading-none ${gradeColor(projected)}`}>
+            {projected !== null ? `${projected.toFixed(1)}%` : '—'}
+          </p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">Original</p>
+          <p className="text-base font-light text-gray-500 dark:text-gray-400 leading-none">
+            {original !== null ? `${original.toFixed(1)}%` : '—'}
+          </p>
+          {delta !== null && Math.abs(delta) >= 0.05 && (
+            <p className={`text-[11px] mt-1 ${delta > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              {delta > 0 ? '+' : ''}{delta.toFixed(1)}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {edited && (
+        <button
+          onClick={() => {
+            setOverrides({})
+            overridesCache.delete(course.courseId)
+          }}
+          className="self-start text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+        >
+          ← Reset to original scores
+        </button>
+      )}
+
+      {/* Groups, sorted by weight desc */}
+      <div className="flex flex-col gap-4">
+        {sortedGroups.map((g) => {
+          const { pct, counted } = groupPercent(g, overrides)
+          const weightPct = breakdown.useWeights && totalWeight > 0
+            ? (g.weight / totalWeight) * 100
+            : null
+          return (
+            <section key={g.id} className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+              <header className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 flex items-baseline justify-between gap-3">
+                <div className="min-w-0 flex items-baseline gap-2">
+                  <p className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">{g.name}</p>
+                  {weightPct !== null && weightPct > 0 ? (
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">
+                      {weightPct.toFixed(0)}% of total
+                    </p>
+                  ) : breakdown.useWeights ? (
+                    <p className="text-[10px] text-gray-400 dark:text-gray-500 shrink-0">Unweighted</p>
+                  ) : null}
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 shrink-0">
+                  {pct !== null ? `${pct.toFixed(1)}%` : '—'}
+                  <span className="text-gray-400 dark:text-gray-500 ml-1.5">
+                    · {counted}/{g.assignments.length}
+                  </span>
+                </p>
+              </header>
+
+              {g.assignments.length === 0 ? (
+                <p className="px-4 py-3 text-[11px] text-gray-400 dark:text-gray-500">No assignments yet.</p>
+              ) : (
+                <ul className="divide-y divide-gray-50 dark:divide-gray-900">
+                  {g.assignments.map((a) => (
+                    <li key={a.id} className="px-4 py-2 flex items-center gap-3">
+                      <span className="flex-1 text-xs font-light text-gray-700 dark:text-gray-300 truncate">
+                        {a.name}
+                      </span>
+                      {a.score === null && (
+                        <span className="shrink-0 text-[10px] text-gray-400 dark:text-gray-500 italic">
+                          ungraded
+                        </span>
+                      )}
+                      <ScoreInput
+                        assignmentId={a.id}
+                        pointsPossible={a.pointsPossible}
+                        originalScore={a.score}
+                        override={overrides[a.id]}
+                        onChange={setOverride}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {(g.dropLowest > 0 || g.dropHighest > 0) && (
+                <p className="px-4 py-1.5 border-t border-gray-100 dark:border-gray-800 text-[10px] text-amber-600 dark:text-amber-400">
+                  Canvas drops {g.dropLowest > 0 ? `${g.dropLowest} lowest` : ''}
+                  {g.dropLowest > 0 && g.dropHighest > 0 ? ' & ' : ''}
+                  {g.dropHighest > 0 ? `${g.dropHighest} highest` : ''} in this group — not modeled below.
+                </p>
+              )}
+            </section>
+          )
+        })}
+      </div>
+
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 leading-relaxed">
+        Type a new score to see how it would change your grade. Clear a field to count an assignment as
+        ungraded. Calculations match Canvas&apos; standard formula
+        {breakdown.useWeights ? ' (weighted by category)' : ' (total points)'}
+        {hasDropRules ? ', but drop-lowest/highest rules are noted, not applied' : ''}.
+      </p>
+    </div>
+  )
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default function GradesView({
@@ -427,11 +861,13 @@ export default function GradesView({
   grades: CourseGrade[]
   recentGrades: GradedSubmission[]
 }) {
-  const [activeTab, setActiveTab] = useState<'grades' | 'updates'>('grades')
+  const [activeTab, setActiveTab] = useState<'grades' | 'updates' | 'selection'>('grades')
+  const [hiddenIds, toggleHide, showAll] = useHiddenIds()
 
   const tabs = [
     { id: 'grades' as const, label: 'Grades' },
     { id: 'updates' as const, label: 'Updates' },
+    { id: 'selection' as const, label: 'Selection' },
   ]
 
   return (
@@ -452,8 +888,11 @@ export default function GradesView({
         ))}
       </div>
 
-      {activeTab === 'grades' && <GradesTab grades={grades} />}
+      {activeTab === 'grades' && <GradesTab grades={grades} hiddenIds={hiddenIds} />}
       {activeTab === 'updates' && <UpdatesTab recentGrades={recentGrades} />}
+      {activeTab === 'selection' && (
+        <SelectionTab grades={grades} hiddenIds={hiddenIds} toggleHide={toggleHide} showAll={showAll} />
+      )}
     </>
   )
 }

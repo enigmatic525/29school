@@ -69,6 +69,12 @@ body {
 .dark .prose-assignment td { border-color: #374151; }
 .dark .prose-assignment th { background: #111827; }
 
+@keyframes week-highlight-fade {
+  0% { opacity: 1; }
+  60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

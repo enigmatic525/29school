@@ -1,19 +1,25 @@
 import 'server-only'
 import { sanitizeHtml } from './security'
 import type {
+  AssignmentGroupSummary,
   CanvasAssignment,
   CanvasCourse,
   CourseGrade,
+  CourseGradeBreakdown,
+  GradeAssignment,
   GradedSubmission,
   RubricCriterionResult,
   SubmissionComment,
 } from './canvas-shared'
 
 export type {
+  AssignmentGroupSummary,
   AssignmentType,
   CanvasAssignment,
   CanvasCourse,
   CourseGrade,
+  CourseGradeBreakdown,
+  GradeAssignment,
   GradedSubmission,
   RubricCriterionResult,
   SubmissionComment,
@@ -268,29 +274,112 @@ export async function fetchRecentSubmissions(token: string, courses: CanvasCours
   )
 }
 
+export async function fetchCourseGradeBreakdown(
+  token: string,
+  courseId: number,
+  useWeightsHint?: boolean,
+): Promise<CourseGradeBreakdown | null> {
+  // If the caller already knows apply_assignment_group_weights (passed down from the
+  // Grades page), skip the extra /courses/:id round-trip.
+  const groupsP = fetch(
+    `https://${DOMAIN}/api/v1/courses/${courseId}/assignment_groups?include[]=assignments&include[]=submission&per_page=100`,
+    { headers: headers(token) },
+  )
+  const courseP = useWeightsHint === undefined
+    ? fetch(`https://${DOMAIN}/api/v1/courses/${courseId}`, { headers: headers(token) })
+    : null
+
+  const groupsRes = await groupsP
+  if (!groupsRes.ok) return null
+  const groupsJson = await groupsRes.json()
+  if (!Array.isArray(groupsJson)) return null
+
+  let useWeights: boolean
+  if (useWeightsHint !== undefined) {
+    useWeights = useWeightsHint
+  } else {
+    const courseRes = await courseP!
+    const courseJson = courseRes.ok ? await courseRes.json() : null
+    useWeights = courseJson?.apply_assignment_group_weights === true
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const groups: AssignmentGroupSummary[] = groupsJson.map((g: any) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rawAssignments = Array.isArray(g?.assignments) ? (g.assignments as any[]) : []
+    const assignments: GradeAssignment[] = rawAssignments
+      .filter((a) => {
+        // Skip assignments that don't count toward the grade.
+        if (a?.omit_from_final_grade === true) return false
+        if (typeof a?.points_possible !== 'number' || a.points_possible <= 0) return false
+        return true
+      })
+      .map((a) => {
+        const sub = a?.submission as Record<string, unknown> | undefined
+        const workflow = typeof sub?.workflow_state === 'string' ? sub.workflow_state : null
+        const state =
+          workflow === 'submitted' || workflow === 'graded' || workflow === 'pending_review' || workflow === 'unsubmitted'
+            ? workflow
+            : null
+        return {
+          id: a.id as number,
+          name: typeof a.name === 'string' ? a.name : 'Untitled',
+          score: typeof sub?.score === 'number' ? (sub.score as number) : null,
+          pointsPossible: a.points_possible as number,
+          state,
+          htmlUrl: typeof a.html_url === 'string' ? (a.html_url as string) : null,
+        }
+      })
+
+    const rules = (g?.rules ?? {}) as { drop_lowest?: number; drop_highest?: number }
+    return {
+      id: g.id as number,
+      name: typeof g.name === 'string' ? g.name : 'Group',
+      weight: typeof g.group_weight === 'number' ? g.group_weight : 0,
+      dropLowest: typeof rules.drop_lowest === 'number' ? rules.drop_lowest : 0,
+      dropHighest: typeof rules.drop_highest === 'number' ? rules.drop_highest : 0,
+      assignments,
+    }
+  })
+
+  return { courseId, useWeights, groups }
+}
+
 export async function fetchGrades(token: string): Promise<CourseGrade[]> {
+  return (await fetchGradesAndCourses(token)).grades
+}
+
+// Single Canvas /courses call serves both the Grades tab and downstream callers
+// (recent submissions, breakdown weighting hint) — avoids issuing the same
+// /courses?enrollment_state=active query twice.
+export async function fetchGradesAndCourses(
+  token: string,
+): Promise<{ grades: CourseGrade[]; courses: CanvasCourse[] }> {
   const res = await fetch(
     `https://${DOMAIN}/api/v1/courses?enrollment_type=student&enrollment_state=active&include[]=total_scores&per_page=100`,
     { headers: headers(token) }
   )
-  if (!res.ok) return []
+  if (!res.ok) return { grades: [], courses: [] }
   const data = await res.json()
-  if (!Array.isArray(data)) return []
+  if (!Array.isArray(data)) return { grades: [], courses: [] }
 
-  const results: CourseGrade[] = []
+  const grades: CourseGrade[] = []
+  const courses: CanvasCourse[] = []
   for (const course of data) {
+    courses.push({ id: course.id, name: course.name, course_code: course.course_code })
     const enrollment = Array.isArray(course.enrollments) ? course.enrollments[0] : null
     const score = enrollment?.computed_current_score ?? null
     const grade = enrollment?.computed_current_grade ?? null
     if (score !== null || grade !== null) {
-      results.push({
+      grades.push({
         courseId: course.id,
         courseName: course.name,
         courseCode: course.course_code,
         currentScore: typeof score === 'number' ? score : null,
         currentGrade: typeof grade === 'string' ? grade : null,
+        useWeights: course.apply_assignment_group_weights === true,
       })
     }
   }
-  return results
+  return { grades, courses }
 }

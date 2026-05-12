@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getSession } from '@/lib/session'
-import { fetchGrades, fetchCourses, fetchRecentSubmissions } from '@/lib/canvas'
+import { fetchGradesAndCourses, fetchRecentSubmissions } from '@/lib/canvas'
 import GradesView from '@/components/GradesView'
 
 export const metadata: Metadata = { title: 'Grades' }
@@ -32,10 +32,9 @@ export default async function GradesPage() {
     )
   }
 
-  const [grades, courses] = await Promise.all([
-    fetchGrades(session.canvasToken),
-    fetchCourses(session.canvasToken),
-  ])
+  // fetchRecentSubmissions needs the course list, so we kick off Grades+Courses first
+  // and then fan out per-course submission fetches in parallel inside it.
+  const { grades, courses } = await fetchGradesAndCourses(session.canvasToken)
   const recentGrades = await fetchRecentSubmissions(session.canvasToken, courses)
 
   if (grades.length === 0 && recentGrades.length === 0) {
