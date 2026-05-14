@@ -711,21 +711,28 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
     setSampleError(null)
   }
 
-  // Fill every ungraded assignment with a random score that lands the course
-  // at the A cutoff, or surface why that isn't possible.
+  // Fill every open ungraded assignment with a random score that lands the
+  // course at the A cutoff, or surface why that isn't possible. Hand-typed
+  // what-if scores (amber) are held fixed; previously generated values (purple)
+  // get re-rolled.
   function handleGenerateSample() {
     if (!breakdown) return
-    const result = generateSampleScores(breakdown, A_CUTOFF)
+    const locked: Record<number, number | null> = {}
+    for (const [idStr, value] of Object.entries(overrides)) {
+      const id = Number(idStr)
+      if (!generatedIds.has(id)) locked[id] = value
+    }
+    const result = generateSampleScores(breakdown, A_CUTOFF, locked)
     if (!result.ok) {
       setSampleError(
         result.reason === 'impossible'
-          ? `Can't reach ${A_CUTOFF}% — even full marks on everything left isn't enough.`
-          : 'No ungraded assignments to generate scores for.',
+          ? `Can't reach ${A_CUTOFF}% — even full marks on everything open isn't enough.`
+          : 'No open assignments to generate scores for.',
       )
       return
     }
     setSampleError(null)
-    const next: Record<number, number | null> = {}
+    const next: Record<number, number | null> = { ...locked }
     for (const [id, score] of result.scores) next[id] = score
     setOverrides(next)
     overridesCache.set(course.courseId, next)

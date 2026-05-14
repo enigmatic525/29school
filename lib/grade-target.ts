@@ -117,6 +117,7 @@ export function randomPartition(total: number, caps: number[], rng: Rng): number
 // Whole-number scores can leave the projected total a point or two off target.
 // Walk it back up to the cutoff: each step +1's whichever assignment moves the
 // total the *least*, so we settle just above the target instead of overshooting.
+// `locked` (the user's hand-typed what-if scores) is held fixed throughout.
 // Guaranteed to terminate — feasibility was already checked against full integer
 // caps, so there is always enough headroom to reach the target.
 function balanceUp(
@@ -124,17 +125,18 @@ function balanceUp(
   scores: Record<number, number>,
   caps: Map<number, number>,
   targetPct: number,
+  locked: Record<number, number | null>,
 ): void {
   const ids = [...caps.keys()]
   for (let guard = 0; guard < 10000; guard++) {
-    const current = projectedTotal(breakdown, scores)
+    const current = projectedTotal(breakdown, { ...locked, ...scores })
     if (current !== null && current >= targetPct) return
     let bestId: number | null = null
     let bestDelta = Infinity
     for (const id of ids) {
       if (scores[id] >= (caps.get(id) ?? 0)) continue // no headroom left
       scores[id] += 1
-      const bumped = projectedTotal(breakdown, scores)
+      const bumped = projectedTotal(breakdown, { ...locked, ...scores })
       scores[id] -= 1
       if (bumped === null) continue
       const delta = bumped - (current ?? 0)
@@ -148,11 +150,16 @@ function balanceUp(
   }
 }
 
-// Generate a plausible set of whole-number scores for every ungraded assignment
-// such that the projected course total lands around (and at/above) `targetPct`.
+// Generate a plausible set of whole-number scores for every open ungraded
+// assignment such that the projected course total lands around (and at/above)
+// `targetPct`.
+//
+// `locked` holds the user's hand-typed what-if scores: those assignments are
+// treated as already decided — counted in the math but never overwritten — so
+// the generator only fills the assignments the user hasn't touched.
 //
 // Three layers:
-//   1. Binary-search a uniform fraction p ∈ [0,1] so that giving every remaining
+//   1. Binary-search a uniform fraction p ∈ [0,1] so that giving every open
 //      assignment p·pointsPossible hits the target. This sizes each *group's*
 //      point pool. Valid because projectedTotal is monotonic in p.
 //   2. Within each group, randomly partition that pool into whole numbers.
@@ -161,24 +168,26 @@ function balanceUp(
 export function generateSampleScores(
   breakdown: CourseGradeBreakdown,
   targetPct: number,
+  locked: Record<number, number | null> = {},
   rng: Rng = Math.random,
 ): SampleResult {
-  // An assignment is "remaining" if it has no score yet. Zero-point assignments
-  // can't move the total, so leave them untouched.
-  const isRemaining = (a: { score: number | null; pointsPossible: number }) =>
-    a.score === null && a.pointsPossible > 0
+  // An assignment is "open" — fair game to fill in — if Canvas hasn't graded it,
+  // the user hasn't pinned a what-if score on it, and it's worth points.
+  const isOpen = (a: { id: number; score: number | null; pointsPossible: number }) =>
+    locked[a.id] === undefined && a.score === null && a.pointsPossible > 0
 
-  const hasRemaining = breakdown.groups.some((g) => g.assignments.some(isRemaining))
-  if (!hasRemaining) return { ok: false, reason: 'nothing-to-generate' }
+  const hasOpen = breakdown.groups.some((g) => g.assignments.some(isOpen))
+  if (!hasOpen) return { ok: false, reason: 'nothing-to-generate' }
 
-  // Best case under the whole-number rule: full integer marks everywhere.
+  // Best case under the whole-number rule: full integer marks on every open
+  // assignment, with the user's locked what-if scores held in place.
   const maxScores: Record<number, number> = {}
   for (const g of breakdown.groups) {
     for (const a of g.assignments) {
-      if (isRemaining(a)) maxScores[a.id] = intCap(a)
+      if (isOpen(a)) maxScores[a.id] = intCap(a)
     }
   }
-  const maxAchievable = projectedTotal(breakdown, maxScores)
+  const maxAchievable = projectedTotal(breakdown, { ...locked, ...maxScores })
   if (maxAchievable === null || maxAchievable < targetPct) {
     return { ok: false, reason: 'impossible' }
   }
@@ -189,7 +198,7 @@ export function generateSampleScores(
     const o: Record<number, number> = {}
     for (const g of breakdown.groups) {
       for (const a of g.assignments) {
-        if (isRemaining(a)) o[a.id] = p * a.pointsPossible
+        if (isOpen(a)) o[a.id] = p * a.pointsPossible
       }
     }
     return o
@@ -198,7 +207,7 @@ export function generateSampleScores(
   let hi = 1
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2
-    const total = projectedTotal(breakdown, uniformScores(mid))
+    const total = projectedTotal(breakdown, { ...locked, ...uniformScores(mid) })
     if (total !== null && total >= targetPct) hi = mid
     else lo = mid
   }
@@ -208,21 +217,21 @@ export function generateSampleScores(
   const scores: Record<number, number> = {}
   const caps = new Map<number, number>() // assignment id -> integer cap, for balanceUp
   for (const g of breakdown.groups) {
-    const groupRemaining = g.assignments.filter(isRemaining)
-    if (groupRemaining.length === 0) continue
-    const groupCaps = groupRemaining.map(intCap)
+    const groupOpen = g.assignments.filter(isOpen)
+    if (groupOpen.length === 0) continue
+    const groupCaps = groupOpen.map(intCap)
     const capSum = groupCaps.reduce((s, c) => s + c, 0)
-    const realPool = p * groupRemaining.reduce((s, a) => s + a.pointsPossible, 0)
+    const realPool = p * groupOpen.reduce((s, a) => s + a.pointsPossible, 0)
     const pool = Math.min(capSum, Math.max(0, Math.round(realPool)))
     const parts = randomPartition(pool, groupCaps, rng)
-    groupRemaining.forEach((a, i) => {
+    groupOpen.forEach((a, i) => {
       scores[a.id] = parts[i]
       caps.set(a.id, groupCaps[i])
     })
   }
 
   // Layer 3 — nudge the whole-number total up to the cutoff.
-  balanceUp(breakdown, scores, caps, targetPct)
+  balanceUp(breakdown, scores, caps, targetPct, locked)
 
   return { ok: true, scores: new Map(Object.entries(scores).map(([k, v]) => [Number(k), v])) }
 }
