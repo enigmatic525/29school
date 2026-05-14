@@ -3,6 +3,7 @@ import { getSession } from '@/lib/session'
 import { fetchProfile } from '@/lib/canvas'
 import { getPref } from '@/lib/notifications'
 import NotificationSettings, { type NotificationSettingsInitial } from '@/components/NotificationSettings'
+import WeeklyTrackerSetting from '@/components/WeeklyTrackerSetting'
 
 export const metadata: Metadata = { title: 'Settings' }
 
@@ -59,6 +60,15 @@ export default async function SettingsPage() {
         ) : (
           <NotificationSettings initial={initial} suggestedEmail={suggestedEmail} />
         )}
+      </section>
+
+      <section className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-5 mb-6">
+        <h2 className="mb-1 text-sm font-medium text-gray-900 dark:text-gray-100">Weekly tracker</h2>
+        <p className="mb-4 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+          A pop-out panel on the Canvas page showing your completion ring and streak for the
+          current week. Turn it off to hide the panel and its edge tab entirely.
+        </p>
+        <WeeklyTrackerSetting />
       </section>
     </>
   )

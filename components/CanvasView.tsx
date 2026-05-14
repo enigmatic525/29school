@@ -3,9 +3,12 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import type { CanvasAssignment } from '@/lib/canvas-shared'
 import { getAssignmentType } from '@/lib/canvas-shared'
+import type { CustomTask } from '@/lib/custom-tasks'
+import { loadCustomTasks, saveCustomTasks } from '@/lib/custom-tasks'
 import { courseColor } from '@/lib/course-colors'
 import CalendarHeatmap from './CalendarHeatmap'
 import AssignmentDetail from './AssignmentDetail'
+import WeeklyTrackerSidebar, { type WeekStats } from './WeeklyTrackerSidebar'
 
 function isAssignmentSubmitted(a: CanvasAssignment): boolean {
   return (
@@ -38,6 +41,7 @@ interface DateGroup {
   isTomorrow: boolean
   isPast: boolean
   assignments: CanvasAssignment[]
+  tasks: CustomTask[]
 }
 
 function typeBadgeClass(type: ReturnType<typeof getAssignmentType>) {
@@ -143,6 +147,80 @@ function AssignmentRow({
   )
 }
 
+// ─── Custom task row ──────────────────────────────────────────────────────────
+
+function TaskRow({
+  task,
+  isPast,
+  onToggle,
+  onDelete,
+}: {
+  task: CustomTask
+  isPast: boolean
+  onToggle: () => void
+  onDelete: () => void
+}) {
+  const { done } = task
+  const overdue = isPast && !done
+  const color = courseColor(task.courseCode)
+
+  return (
+    <div
+      className={`flex items-center gap-3 px-4 py-3 border-b border-gray-50 dark:border-gray-800/60 last:border-b-0 group transition-colors hover:bg-gray-50 dark:hover:bg-gray-900 ${
+        done || isPast ? 'opacity-50' : ''
+      }`}
+    >
+      <button
+        onClick={onToggle}
+        aria-label={done ? 'Mark incomplete' : 'Mark complete'}
+        className={`shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+          done
+            ? 'bg-emerald-500 border-emerald-500 dark:bg-emerald-400 dark:border-emerald-400'
+            : 'border-gray-300 hover:border-gray-500 dark:border-gray-600 dark:hover:border-gray-400'
+        }`}
+      >
+        {done && (
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        )}
+      </button>
+
+      <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded-sm leading-none bg-gray-100 text-gray-500 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
+        TASK
+      </span>
+
+      <span className={`flex-1 min-w-0 text-sm font-light leading-snug truncate transition-colors ${
+        done
+          ? 'line-through text-gray-300 dark:text-gray-600'
+          : overdue
+          ? 'text-red-700 dark:text-red-400'
+          : 'text-gray-800 dark:text-gray-200'
+      }`}>
+        {task.title}
+      </span>
+
+      {task.courseCode && (
+        <span className="shrink-0 hidden sm:inline-flex items-center gap-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full ${color.dot}`} aria-hidden />
+          <span className={`text-[11px] leading-none ${color.text}`}>{task.courseCode}</span>
+        </span>
+      )}
+
+      <button
+        onClick={onDelete}
+        aria-label="Delete task"
+        title="Delete task"
+        className="shrink-0 text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+  )
+}
+
 // ─── Dashboard tab (upcoming) ─────────────────────────────────────────────────
 
 function DashboardTab({
@@ -162,6 +240,12 @@ function DashboardTab({
   const hasScrolledRef = useRef(false)
   const [returnArrow, setReturnArrow] = useState<'up' | 'down' | null>(null)
   const searchInputRef = useRef<HTMLInputElement | null>(null)
+  const [customTasks, setCustomTasks] = useState<CustomTask[]>([])
+  const [showAddTask, setShowAddTask] = useState(false)
+  const [newTaskTitle, setNewTaskTitle] = useState('')
+  const [newTaskDate, setNewTaskDate] = useState(() => toDateStr(new Date()))
+  const [newTaskCourse, setNewTaskCourse] = useState('')
+  const newTaskInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     try {
@@ -180,6 +264,7 @@ function DashboardTab({
         if (typeof v.hideSubmitted === 'boolean') setHideSubmitted(v.hideSubmitted)
       }
     } catch {}
+    setCustomTasks(loadCustomTasks())
   }, [])
 
   // Persist filter state so it survives reload — but not search, since a
@@ -201,6 +286,31 @@ function DashboardTab({
       try { localStorage.setItem('29-completed-assignments', JSON.stringify([...next])) } catch {}
       return next
     })
+  }
+
+  function persistTasks(next: CustomTask[]) {
+    saveCustomTasks(next)
+    setCustomTasks(next)
+  }
+
+  function addTask() {
+    const title = newTaskTitle.trim()
+    if (!title || !newTaskDate) return
+    persistTasks([
+      ...customTasks,
+      { id: crypto.randomUUID(), title, date: newTaskDate, courseCode: newTaskCourse || undefined, done: false },
+    ])
+    setNewTaskTitle('')
+    setNewTaskCourse('')
+    newTaskInputRef.current?.focus()
+  }
+
+  function toggleTask(id: string) {
+    persistTasks(customTasks.map((t) => (t.id === id ? { ...t, done: !t.done } : t)))
+  }
+
+  function deleteTask(id: string) {
+    persistTasks(customTasks.filter((t) => t.id !== id))
   }
 
   function effectiveDate(a: CanvasAssignment): Date {
@@ -245,17 +355,35 @@ function DashboardTab({
       return da !== db ? da - db : a.name.localeCompare(b.name)
     })
 
-    const map = new Map<string, CanvasAssignment[]>()
+    const filteredTasks = customTasks.filter((t) => {
+      if (filterCourse && t.courseCode !== filterCourse) return false
+      if (q && !t.title.toLowerCase().includes(q) && !(t.courseCode ?? '').toLowerCase().includes(q)) return false
+      return true
+    })
+
+    const map = new Map<string, { assignments: CanvasAssignment[]; tasks: CustomTask[] }>()
+    function bucket(key: string) {
+      let entry = map.get(key)
+      if (!entry) { entry = { assignments: [], tasks: [] }; map.set(key, entry) }
+      return entry
+    }
     for (const a of filtered) {
       const d = new Date(effectiveDate(a))
       d.setHours(0, 0, 0, 0)
-      const key = toDateStr(d)
-      if (!map.has(key)) map.set(key, [])
-      map.get(key)!.push(a)
+      bucket(toDateStr(d)).assignments.push(a)
+    }
+    for (const t of filteredTasks) {
+      bucket(t.date).tasks.push(t)
+    }
+    for (const entry of map.values()) {
+      entry.tasks.sort((a, b) => a.title.localeCompare(b.title))
     }
 
     const result: DateGroup[] = []
-    for (const [key, items] of map) {
+    // Tasks can land on dates outside the assignment sort order, so sort the
+    // day keys explicitly rather than relying on Map insertion order.
+    for (const key of [...map.keys()].sort()) {
+      const entry = map.get(key)!
       const isToday = key === todayStr
       const isTomorrow = key === tomorrowStr
       const isYesterday = key === yesterdayStr
@@ -269,19 +397,81 @@ function DashboardTab({
         ? 'Yesterday'
         : date.toLocaleDateString('en-US', { weekday: 'long' })
       const sublabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      result.push({ key, label, sublabel, isToday, isTomorrow, isPast, assignments: items })
+      result.push({ key, label, sublabel, isToday, isTomorrow, isPast, assignments: entry.assignments, tasks: entry.tasks })
     }
     return result
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignments, plannedDates, filterCourse, search, hideSubmitted, completedIds])
+  }, [assignments, customTasks, plannedDates, filterCourse, search, hideSubmitted, completedIds])
+
+  // Completion ring scope: the current calendar week (Mon–Sun), so the ratio
+  // stays bounded and meaningful. Course/search filters apply; "hide submitted"
+  // does not — submitted work still counts as done here.
+  const weekStats = useMemo<WeekStats>(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    const dow = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - (dow === 0 ? 6 : dow - 1))
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    const startStr = toDateStr(monday)
+    const endStr = toDateStr(sunday)
+    const q = search.trim().toLowerCase()
+
+    const byCourse = new Map<string, { count: number; done: number }>()
+    let total = 0
+    let done = 0
+
+    for (const a of assignments) {
+      if (filterCourse && a.courseCode !== filterCourse) continue
+      if (q && !a.name.toLowerCase().includes(q) && !(a.courseCode ?? '').toLowerCase().includes(q)) continue
+      const ds = toDateStr(effectiveDate(a))
+      if (ds < startStr || ds > endStr) continue
+      const code = a.courseCode || 'Other'
+      const isDone = completedIds.has(a.id) || isAssignmentSubmitted(a)
+      const e = byCourse.get(code) ?? { count: 0, done: 0 }
+      e.count++
+      if (isDone) e.done++
+      byCourse.set(code, e)
+      total++
+      if (isDone) done++
+    }
+    for (const t of customTasks) {
+      if (filterCourse && t.courseCode !== filterCourse) continue
+      if (q && !t.title.toLowerCase().includes(q) && !(t.courseCode ?? '').toLowerCase().includes(q)) continue
+      if (t.date < startStr || t.date > endStr) continue
+      const code = t.courseCode || 'Other'
+      const e = byCourse.get(code) ?? { count: 0, done: 0 }
+      e.count++
+      if (t.done) e.done++
+      byCourse.set(code, e)
+      total++
+      if (t.done) done++
+    }
+
+    const segments = [...byCourse.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([code, v]) => ({
+        code,
+        count: v.count,
+        done: v.done,
+        color: courseColor(code === 'Other' ? undefined : code),
+      }))
+
+    const fmtShort = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return { total, done, segments, rangeLabel: `${fmtShort(monday)} – ${fmtShort(sunday)}` }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignments, customTasks, completedIds, filterCourse, search, plannedDates])
 
   const upcomingCount = useMemo(() => {
     return groups.reduce(
-      (n, g) => n + (g.isPast ? 0 : g.assignments.length),
+      (n, g) => n + (g.isPast ? 0 : g.assignments.length + g.tasks.length),
       0,
     )
   }, [groups])
-  const totalCompleted = assignments.filter((a) => completedIds.has(a.id)).length
+  const totalCompleted =
+    assignments.filter((a) => completedIds.has(a.id)).length +
+    customTasks.filter((t) => t.done).length
   const submittedCount = useMemo(
     () => assignments.filter((a) => isAssignmentSubmitted(a) && (!filterCourse || a.courseCode === filterCourse)).length,
     [assignments, filterCourse],
@@ -359,6 +549,8 @@ function DashboardTab({
 
   return (
     <>
+      <WeeklyTrackerSidebar weekStats={weekStats} />
+
       <div className="flex flex-wrap items-center gap-3 mb-5">
         <p className="text-xs text-gray-400 dark:text-gray-500 mr-auto">
           {upcomingCount} upcoming
@@ -408,12 +600,77 @@ function DashboardTab({
             ? submittedCount > 0 ? `Submitted hidden (${submittedCount})` : 'Submitted hidden'
             : 'Hide submitted'}
         </button>
+
+        <button
+          onClick={() => {
+            const next = !showAddTask
+            setShowAddTask(next)
+            if (next) requestAnimationFrame(() => newTaskInputRef.current?.focus())
+          }}
+          className={`text-xs border px-2 py-1 transition-colors ${
+            showAddTask
+              ? 'border-gray-700 dark:border-gray-300 text-gray-900 dark:text-gray-100 bg-gray-50 dark:bg-gray-900'
+              : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500'
+          }`}
+          aria-expanded={showAddTask}
+        >
+          {showAddTask ? 'Cancel' : '+ Add task'}
+        </button>
       </div>
+
+      {showAddTask && (
+        <div className="mb-5 border border-gray-200 dark:border-gray-800 bg-gray-50/60 dark:bg-gray-900/40 p-3 flex flex-wrap items-end gap-2">
+          <div className="flex flex-col gap-1 flex-1 min-w-[180px]">
+            <label htmlFor="new-task-title" className="text-[10px] text-gray-400 dark:text-gray-500">Task</label>
+            <input
+              id="new-task-title"
+              ref={newTaskInputRef}
+              type="text"
+              value={newTaskTitle}
+              onChange={(e) => setNewTaskTitle(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTask() } }}
+              placeholder="e.g. Study for bio quiz"
+              className="px-2 py-1 text-xs text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-600 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label htmlFor="new-task-date" className="text-[10px] text-gray-400 dark:text-gray-500">Date</label>
+            <input
+              id="new-task-date"
+              type="date"
+              value={newTaskDate}
+              onChange={(e) => setNewTaskDate(e.target.value)}
+              className="px-2 py-1 text-xs text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none focus:border-gray-400 dark:focus:border-gray-500 transition-colors"
+            />
+          </div>
+          {courses.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <label htmlFor="new-task-course" className="text-[10px] text-gray-400 dark:text-gray-500">Course</label>
+              <select
+                id="new-task-course"
+                value={newTaskCourse}
+                onChange={(e) => setNewTaskCourse(e.target.value)}
+                className="px-2 py-1 text-xs text-gray-500 dark:text-gray-300 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 outline-none hover:border-gray-400 dark:hover:border-gray-500 transition-colors"
+              >
+                <option value="">No course</option>
+                {courses.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
+          <button
+            onClick={addTask}
+            disabled={!newTaskTitle.trim() || !newTaskDate}
+            className="px-4 py-1 text-xs font-light text-white dark:text-gray-900 bg-gray-900 dark:bg-gray-100 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Add
+          </button>
+        </div>
+      )}
 
       {groups.length === 0 ? (
         <div className="border border-dashed border-gray-200 dark:border-gray-800 py-16 text-center">
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            {search || filterCourse || hideSubmitted ? 'No assignments match your filters.' : 'No assignments to show.'}
+            {search || filterCourse || hideSubmitted ? 'No assignments match your filters.' : 'No assignments or tasks to show.'}
           </p>
           {(search || filterCourse || hideSubmitted) && (
             <button
@@ -460,7 +717,7 @@ function DashboardTab({
                   {group.sublabel}
                 </span>
                 <span className={`ml-auto text-[10px] ${group.isToday ? 'text-gray-500 dark:text-gray-300' : 'text-gray-300 dark:text-gray-600'}`}>
-                  {group.assignments.length}
+                  {group.assignments.length + group.tasks.length}
                 </span>
               </div>
               <div className="bg-white dark:bg-gray-950 divide-y divide-gray-50 dark:divide-gray-800">
@@ -472,6 +729,15 @@ function DashboardTab({
                     isPast={group.isPast}
                     onToggleComplete={() => toggleComplete(a.id)}
                     onDetail={() => setDetailAssignment(a)}
+                  />
+                ))}
+                {group.tasks.map((t) => (
+                  <TaskRow
+                    key={t.id}
+                    task={t}
+                    isPast={group.isPast}
+                    onToggle={() => toggleTask(t.id)}
+                    onDelete={() => deleteTask(t.id)}
                   />
                 ))}
               </div>
