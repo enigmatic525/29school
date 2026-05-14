@@ -114,3 +114,36 @@ export interface CourseGradeBreakdown {
   useWeights: boolean
   groups: AssignmentGroupSummary[]
 }
+
+export interface SubmissionAttachment {
+  id: number | string
+  displayName: string
+  // Canvas-signed download URL — validated as http(s) at the fetch boundary.
+  url: string
+  contentType: string | null
+  size: number | null
+}
+
+// The student's own submission for one assignment, plus the assignment's
+// rubric. Powers the expanded AssignmentDetail view.
+export interface SubmissionDetail {
+  // 'online_text_entry' | 'online_url' | 'online_upload' | 'discussion_topic' |
+  // 'media_recording' | 'on_paper' | etc. — null when nothing submitted yet.
+  submissionType: string | null
+  // Sanitised HTML for text entries.
+  body: string | null
+  // For url entries.
+  url: string | null
+  attachments: SubmissionAttachment[]
+  submittedAt: string | null
+  workflowState: 'submitted' | 'graded' | 'pending_review' | 'unsubmitted' | null
+  // Canvas attempt counter — >1 means the assignment was resubmitted.
+  attempt: number | null
+  score: number | null
+  grade: string | null
+  pointsPossible: number | null
+  comments: SubmissionComment[]
+  // Every rubric criterion the assignment defines, merged with the student's
+  // assessed points/rating where graded. Empty when the assignment has no rubric.
+  rubric: RubricCriterionResult[]
+}

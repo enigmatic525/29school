@@ -1,7 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import type { CanvasAssignment } from '@/lib/canvas-shared'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import type {
+  CanvasAssignment,
+  SubmissionDetail,
+  SubmissionComment,
+  RubricCriterionResult,
+} from '@/lib/canvas-shared'
 
 const SUBMITTABLE = ['online_upload', 'online_text_entry', 'online_url'] as const
 type SubmittableType = typeof SUBMITTABLE[number]
@@ -22,6 +27,90 @@ function safeHref(raw: string | undefined | null): string {
   }
 }
 
+function fmtBytes(bytes: number | null): string {
+  if (bytes === null || bytes <= 0) return ''
+  const units = ['B', 'KB', 'MB', 'GB']
+  let n = bytes
+  let i = 0
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024
+    i++
+  }
+  return `${n < 10 && i > 0 ? n.toFixed(1) : Math.round(n)} ${units[i]}`
+}
+
+function fmtCommentDate(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3">
+      {children}
+    </p>
+  )
+}
+
+function CommentList({ comments }: { comments: SubmissionComment[] }) {
+  return (
+    <ul className="flex flex-col gap-2">
+      {comments.map((c) => (
+        <li
+          key={c.id}
+          className="border-l-2 border-gray-200 dark:border-gray-700 pl-3 text-sm font-light text-gray-700 dark:text-gray-300"
+        >
+          <div className="flex items-baseline justify-between gap-2 mb-0.5">
+            <span className="text-[11px] text-gray-500 dark:text-gray-400">{c.author}</span>
+            {c.createdAt && (
+              <span className="text-[10px] text-gray-400 dark:text-gray-500">{fmtCommentDate(c.createdAt)}</span>
+            )}
+          </div>
+          <p className="whitespace-pre-wrap leading-relaxed">{c.text}</p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function RubricList({ rubric }: { rubric: RubricCriterionResult[] }) {
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {rubric.map((r) => (
+        <li key={r.id} className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-3 py-2">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-light text-gray-800 dark:text-gray-200 leading-snug">
+                {r.description ?? 'Criterion'}
+              </p>
+              {r.ratingDescription && (
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">
+                  {r.ratingDescription}
+                </p>
+              )}
+            </div>
+            {(r.points !== null || r.maxPoints !== null) && (
+              <p className="shrink-0 text-xs font-light text-gray-700 dark:text-gray-300 leading-none mt-0.5">
+                {r.points ?? '—'}
+                {r.maxPoints !== null && (
+                  <span className="text-gray-400 dark:text-gray-500"> / {r.maxPoints}</span>
+                )}
+              </p>
+            )}
+          </div>
+          {r.comment && (
+            <p className="mt-1.5 text-[11px] text-gray-600 dark:text-gray-400 italic leading-snug">
+              “{r.comment}”
+            </p>
+          )}
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 interface Props {
   assignment: CanvasAssignment
   plannedDate?: string
@@ -32,7 +121,9 @@ interface Props {
 export default function AssignmentDetail({ assignment, plannedDate, onMove, onClose }: Props) {
   const actual = new Date(assignment.due_at!)
   const planned = plannedDate ? new Date(plannedDate + 'T12:00:00') : null
-  const isShifted = planned && planned.getTime() !== actual.setHours(0, 0, 0, 0)
+  // Compare calendar days. `planned` is normalised to local noon, so a raw
+  // timestamp compare against the due date would read as shifted every time.
+  const isShifted = !!planned && planned.toDateString() !== actual.toDateString()
 
   const fmtDate = (d: Date) =>
     d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -51,6 +142,9 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
   const [error, setError] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
+  const [detail, setDetail] = useState<SubmissionDetail | null>(null)
+  const [detailStatus, setDetailStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape' && !loading) onClose()
@@ -58,6 +152,28 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, loading])
+
+  // Pull the student's own submission + the assignment's rubric whenever the
+  // modal opens. Canvas scopes this to the caller, so it's their work only.
+  const loadDetail = useCallback(async () => {
+    setDetailStatus('loading')
+    try {
+      const params = new URLSearchParams({
+        courseId: String(assignment.course_id),
+        assignmentId: String(assignment.id),
+      })
+      const res = await fetch(`/api/submission?${params}`)
+      if (!res.ok) throw new Error(`Failed (${res.status})`)
+      setDetail((await res.json()) as SubmissionDetail)
+      setDetailStatus('loaded')
+    } catch {
+      setDetailStatus('error')
+    }
+  }, [assignment.course_id, assignment.id])
+
+  useEffect(() => {
+    void loadDetail()
+  }, [loadDetail])
 
   async function submit() {
     setLoading(true)
@@ -88,12 +204,18 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
         throw new Error(data.error || `Submission failed (${res.status})`)
       }
       setDone(true)
+      // Refresh so the "Your submission" section reflects the new attempt.
+      void loadDetail()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Something went wrong')
     } finally {
       setLoading(false)
     }
   }
+
+  const hasSubmissionContent = !!(
+    detail && (detail.submittedAt || detail.body || detail.url || detail.attachments.length > 0)
+  )
 
   return (
     <div
@@ -186,6 +308,96 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
               <p className="text-sm text-gray-400 dark:text-gray-500 italic">No description provided.</p>
             )}
           </div>
+
+          {detailStatus === 'loading' && (
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <p className="text-xs text-gray-400 dark:text-gray-500">Loading submission &amp; rubric…</p>
+            </div>
+          )}
+
+          {detailStatus === 'error' && (
+            <div className="px-5 py-3 border-b border-gray-100 dark:border-gray-800">
+              <p className="text-[11px] text-gray-400 dark:text-gray-500">Couldn’t load submission details.</p>
+            </div>
+          )}
+
+          {/* Your submission — full contents of what was turned in */}
+          {detailStatus === 'loaded' && detail && hasSubmissionContent && (
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <SectionLabel>Your submission</SectionLabel>
+              <p className="text-[11px] text-gray-400 dark:text-gray-500 mb-2.5">
+                {detail.submittedAt
+                  ? `Submitted ${new Date(detail.submittedAt).toLocaleDateString('en-US', {
+                      month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit',
+                    })}`
+                  : 'Submitted'}
+                {detail.attempt !== null && detail.attempt > 1 && (
+                  <span className="ml-2 text-gray-300 dark:text-gray-600">· Attempt {detail.attempt}</span>
+                )}
+              </p>
+
+              {detail.body ? (
+                // Sanitised server-side before it ever reaches the client.
+                <div
+                  className="prose-assignment text-sm font-light text-gray-700 dark:text-gray-300 leading-relaxed"
+                  dangerouslySetInnerHTML={{ __html: detail.body }}
+                />
+              ) : detail.url ? (
+                <a
+                  href={safeHref(detail.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-light text-gray-700 dark:text-gray-300 underline underline-offset-2 break-all hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+                >
+                  {detail.url}
+                </a>
+              ) : detail.attachments.length > 0 ? (
+                <ul className="flex flex-col gap-1.5">
+                  {detail.attachments.map((a) => (
+                    <li key={a.id}>
+                      <a
+                        href={safeHref(a.url)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2.5 border border-gray-200 dark:border-gray-800 px-3 py-2 hover:border-gray-400 dark:hover:border-gray-600 transition-colors group"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0 text-gray-400 dark:text-gray-500">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                        <span className="flex-1 min-w-0 truncate text-sm font-light text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100 transition-colors">
+                          {a.displayName}
+                        </span>
+                        {fmtBytes(a.size) && (
+                          <span className="shrink-0 text-[10px] text-gray-400 dark:text-gray-500">{fmtBytes(a.size)}</span>
+                        )}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-400 dark:text-gray-500 italic">
+                  Submitted on Canvas — open it there to view the full contents.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Feedback — teacher comments on the submission */}
+          {detailStatus === 'loaded' && detail && detail.comments.length > 0 && (
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <SectionLabel>Feedback</SectionLabel>
+              <CommentList comments={detail.comments} />
+            </div>
+          )}
+
+          {/* Rubric — always shown when the assignment defines one */}
+          {detailStatus === 'loaded' && detail && detail.rubric.length > 0 && (
+            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+              <SectionLabel>Rubric</SectionLabel>
+              <RubricList rubric={detail.rubric} />
+            </div>
+          )}
 
           {/* Submission */}
           <div className="px-5 py-4">

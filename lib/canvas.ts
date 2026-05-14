@@ -1,5 +1,5 @@
 import 'server-only'
-import { sanitizeHtml } from './security'
+import { sanitizeHtml, isSafeHttpUrl } from './security'
 import type {
   AssignmentGroupSummary,
   CanvasAssignment,
@@ -9,7 +9,9 @@ import type {
   GradeAssignment,
   GradedSubmission,
   RubricCriterionResult,
+  SubmissionAttachment,
   SubmissionComment,
+  SubmissionDetail,
 } from './canvas-shared'
 
 export type {
@@ -22,7 +24,9 @@ export type {
   GradeAssignment,
   GradedSubmission,
   RubricCriterionResult,
+  SubmissionAttachment,
   SubmissionComment,
+  SubmissionDetail,
 } from './canvas-shared'
 export { getAssignmentScore, getAssignmentType } from './canvas-shared'
 
@@ -272,6 +276,118 @@ export async function fetchRecentSubmissions(token: string, courses: CanvasCours
   return perCourse.flat().sort((a, b) =>
     new Date(b.gradedAt).getTime() - new Date(a.gradedAt).getTime()
   )
+}
+
+// Merge a rubric *definition* (from the assignment) with the student's
+// *assessment* (from the submission). Iterates the definition so every
+// criterion shows even when the work hasn't been graded against it yet —
+// unlike fetchRecentSubmissions, which only surfaces assessed criteria.
+function buildRubricFromDefinition(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rubricDefs: any[],
+  rubricAssessment: Record<string, { points?: number; comments?: string; rating_id?: string }> | null,
+): RubricCriterionResult[] {
+  return rubricDefs.map((def) => {
+    const id = String(def?.id ?? '')
+    const val = rubricAssessment?.[id] ?? null
+    let ratingDescription: string | null = null
+    if (val?.rating_id && Array.isArray(def?.ratings)) {
+      const r = def.ratings.find((rr: { id?: unknown }) => String(rr?.id) === String(val.rating_id))
+      if (r && typeof r.description === 'string') ratingDescription = r.description
+    }
+    return {
+      id,
+      description: typeof def?.description === 'string' ? def.description : null,
+      longDescription: typeof def?.long_description === 'string' ? def.long_description : null,
+      points: typeof val?.points === 'number' ? val.points : null,
+      maxPoints: typeof def?.points === 'number' ? def.points : null,
+      ratingDescription,
+      comment: typeof val?.comments === 'string' && val.comments.trim() ? val.comments : null,
+    } satisfies RubricCriterionResult
+  })
+}
+
+// One student's submission for one assignment, plus the assignment's rubric.
+// Canvas scopes /submissions/self to the authenticated user and their own
+// enrollments, so arbitrary id guessing just yields a non-ok response here.
+export async function fetchSubmissionDetail(
+  token: string,
+  courseId: number,
+  assignmentId: number,
+): Promise<SubmissionDetail | null> {
+  const [subRes, asgRes] = await Promise.all([
+    fetch(
+      `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/self?include[]=submission_comments&include[]=rubric_assessment`,
+      { headers: headers(token) },
+    ),
+    fetch(
+      `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}`,
+      { headers: headers(token) },
+    ),
+  ])
+
+  // The submission endpoint gates access: a non-ok response means the user
+  // isn't enrolled or the ids are bogus. Fail closed.
+  if (!subRes.ok) return null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const s = (await subRes.json().catch(() => null)) as any
+  if (!s || typeof s !== 'object') return null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const asg = asgRes.ok ? ((await asgRes.json().catch(() => null)) as any) : null
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawAttachments = Array.isArray(s.attachments) ? (s.attachments as any[]) : []
+  const attachments: SubmissionAttachment[] = rawAttachments
+    .filter((a) => a && typeof a === 'object' && isSafeHttpUrl(a.url))
+    .map((a) => ({
+      id: (a.id as number | string | undefined) ?? String(a.url),
+      displayName:
+        (typeof a.display_name === 'string' && a.display_name) ||
+        (typeof a.filename === 'string' && a.filename) ||
+        'Attachment',
+      url: String(a.url),
+      contentType: typeof a.content_type === 'string' ? a.content_type : null,
+      size: typeof a.size === 'number' ? a.size : null,
+    }))
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rawComments = Array.isArray(s.submission_comments) ? (s.submission_comments as any[]) : []
+  const comments: SubmissionComment[] = rawComments
+    .filter((c) => typeof c?.comment === 'string' && c.comment.trim() !== '')
+    .map((c) => ({
+      id: (c.id as number | string) ?? `${s.id}-${c.created_at ?? ''}`,
+      author: typeof c.author_name === 'string' && c.author_name ? c.author_name : 'Teacher',
+      text: c.comment as string,
+      createdAt: typeof c.created_at === 'string' ? c.created_at : null,
+    }))
+
+  const rubricDefs = asg && Array.isArray(asg.rubric) ? asg.rubric : []
+  const rubricAssessment = (s.rubric_assessment ?? null) as Record<
+    string,
+    { points?: number; comments?: string; rating_id?: string }
+  > | null
+  const rubric = buildRubricFromDefinition(rubricDefs, rubricAssessment)
+
+  const workflow = typeof s.workflow_state === 'string' ? s.workflow_state : null
+
+  return {
+    submissionType: typeof s.submission_type === 'string' ? s.submission_type : null,
+    body: typeof s.body === 'string' ? sanitizeHtml(s.body) : null,
+    url: typeof s.url === 'string' && isSafeHttpUrl(s.url) ? s.url : null,
+    attachments,
+    submittedAt: typeof s.submitted_at === 'string' ? s.submitted_at : null,
+    workflowState:
+      workflow === 'submitted' || workflow === 'graded' || workflow === 'pending_review' || workflow === 'unsubmitted'
+        ? workflow
+        : null,
+    attempt: typeof s.attempt === 'number' ? s.attempt : null,
+    score: typeof s.score === 'number' ? s.score : null,
+    grade: typeof s.grade === 'string' ? s.grade : null,
+    pointsPossible: asg && typeof asg.points_possible === 'number' ? asg.points_possible : null,
+    comments,
+    rubric,
+  }
 }
 
 export async function fetchCourseGradeBreakdown(
