@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { timingSafeEqual } from 'node:crypto'
 import { fetchCourses, fetchRecentSubmissions } from '@/lib/canvas'
 import { listEnabledPrefs, markPaused, updateLastSeen } from '@/lib/notifications'
-import { sendGradeAlert } from '@/lib/email'
+import { sendGradeAlert, sendPausedNotice } from '@/lib/email'
 
 // Vercel Cron hits this on schedule (configured in vercel.json) using GET
 // with the bearer token from CRON_SECRET. We additionally allow POST so
@@ -71,6 +71,13 @@ async function handle(request: NextRequest) {
     if (!probe.ok) {
       if (probe.invalid) {
         await markPaused(pref.canvas_user_id, 'token_invalid')
+        // Tell the user their alerts stopped — best-effort, must never break
+        // the run for the remaining users.
+        try {
+          await sendPausedNotice(pref.email)
+        } catch (e) {
+          console.error(`sendPausedNotice failed for ${pref.canvas_user_id}:`, (e as Error).message)
+        }
         paused += 1
       } else {
         skipped += 1

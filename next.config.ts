@@ -1,30 +1,16 @@
 import type { NextConfig } from "next";
 
-// Strict-ish defaults. CSP keeps 'unsafe-inline' for scripts because of the
-// theme bootstrap in app/layout.tsx (must run pre-paint to avoid FOUC) and for
-// styles because Tailwind utility classes ride alongside the occasional inline
-// style attribute. Everything else is locked down. img-src allows https:
-// because Canvas-authored assignment HTML may embed images from any host.
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self'",
-  "media-src 'self'",
-  "object-src 'none'",
-  "frame-src 'none'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "manifest-src 'self'",
-  "worker-src 'self' blob:",
-  "upgrade-insecure-requests",
-].join('; ')
-
+// Content-Security-Policy is owned solely by proxy.ts, which is dev-aware
+// (Turbopack HMR needs 'unsafe-eval' + ws: in dev, locked down in prod).
+// Defining a second, divergent CSP here would make the browser enforce the
+// *intersection* of both — silently overriding the dev-aware policy and
+// making future edits to either file invisible. So CSP lives in one place.
+//
+// These headers stay here because next.config's `headers()` covers *static
+// assets* too (JS/CSS chunks, the manifest), which proxy.ts's matcher
+// deliberately excludes. CSP on a non-document asset response is inert, so
+// nothing is lost by omitting it here.
 const SECURITY_HEADERS = [
-  { key: 'Content-Security-Policy', value: CSP },
   { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
