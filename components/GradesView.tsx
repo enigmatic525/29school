@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import type {
   CourseGrade,
   CourseGradeBreakdown,
@@ -11,8 +11,44 @@ import { projectedTotal, groupPercent, generateSampleScores } from '@/lib/grade-
 import { courseColor } from '@/lib/course-colors'
 
 const LS_KEY = '29-hidden-grades'
-// EastsidePrep's A cutoff — the target the "Generate Sample" button aims for.
-const A_CUTOFF = 93
+
+// Goal grades the "Generate Sample" button can aim for, with the percentage
+// cutoff each one needs. EastsidePrep's scale. `as const` keeps the labels as a
+// literal union (see GoalLabel) instead of widening to plain `string`.
+const GOAL_GRADES = [
+  { label: 'A', cutoff: 93 },
+  { label: 'A-', cutoff: 90 },
+  { label: 'B+', cutoff: 87 },
+  { label: 'B', cutoff: 83 },
+  { label: 'B-', cutoff: 80 },
+] as const
+
+type GoalLabel = (typeof GOAL_GRADES)[number]['label']
+
+// Accent classes for a goal cutoff — green for the A range, blue for the B
+// range, amber below. A generated score is shown in the color of the grade it's
+// aiming for, so switching the goal recolors the purple numbers accordingly.
+function goalAccent(cutoff: number): { text: string; border: string; btn: string } {
+  if (cutoff >= 90) {
+    return {
+      text: 'text-green-600 dark:text-green-400',
+      border: 'border-green-400 dark:border-green-500',
+      btn: 'border-green-300 dark:border-green-800 text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/40',
+    }
+  }
+  if (cutoff >= 83) {
+    return {
+      text: 'text-blue-600 dark:text-blue-400',
+      border: 'border-blue-400 dark:border-blue-500',
+      btn: 'border-blue-300 dark:border-blue-800 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40',
+    }
+  }
+  return {
+    text: 'text-amber-600 dark:text-amber-400',
+    border: 'border-amber-400 dark:border-amber-500',
+    btn: 'border-amber-300 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40',
+  }
+}
 
 function gradeColor(score: number | null): string {
   if (score === null) return 'text-gray-400 dark:text-gray-500'
@@ -556,6 +592,8 @@ const overridesCache = new Map<number, Record<number, number | null>>()
 // hand-typed). Kept alongside overridesCache so reopening a course still shows
 // the purple styling.
 const generatedCache = new Map<number, Set<number>>()
+// Remembers each course's chosen goal grade across dropdown reopens.
+const goalCache = new Map<number, GoalLabel>()
 
 function prefetchBreakdown(course: CourseGrade): Promise<CourseGradeBreakdown | null> {
   const existing = breakdownCache.get(course.courseId)
@@ -586,20 +624,57 @@ function parseScoreInput(raw: string): number | null | 'invalid' {
   return n
 }
 
+// Small "i" button that toggles a one-paragraph explanation panel. Closes on an
+// outside click (the mousedown listener is only attached while open) so it can
+// never get stuck covering the controls underneath it.
+function InfoPopover({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function onPointerDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onPointerDown)
+    return () => document.removeEventListener('mousedown', onPointerDown)
+  }, [open])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={label}
+        aria-expanded={open}
+        className="w-4 h-4 flex items-center justify-center rounded-full border border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500 text-[9px] leading-none hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-500 dark:hover:border-gray-400 transition-colors"
+      >
+        i
+      </button>
+      {open && (
+        <div className="absolute z-10 top-6 left-0 w-64 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg p-3 text-[11px] font-light leading-relaxed text-gray-600 dark:text-gray-300">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ScoreInput({
   assignmentId,
   pointsPossible,
   originalScore,
   override,
-  generated,
+  generatedAccent,
   onChange,
 }: {
   assignmentId: number
   pointsPossible: number
   originalScore: number | null
   override: number | null | undefined
-  // True when this value came from "Generate Sample" rather than being typed.
-  generated: boolean
+  // Non-null when this value came from "Generate Sample": the goal-grade accent
+  // classes to paint it in. Null when hand-typed or untouched.
+  generatedAccent: { text: string; border: string } | null
   onChange: (id: number, value: number | null | undefined) => void
 }) {
   const display =
@@ -607,9 +682,9 @@ function ScoreInput({
       ? override === null ? '' : String(override)
       : originalScore !== null ? String(originalScore) : ''
   const edited = override !== undefined
-  // Purple = auto-generated, amber = hand-edited, gray = untouched.
-  const inputColor = generated
-    ? 'border-purple-400 dark:border-purple-500 text-purple-600 dark:text-purple-400'
+  // Generated = goal-grade color, amber = hand-edited, gray = untouched.
+  const inputColor = generatedAccent
+    ? `${generatedAccent.border} ${generatedAccent.text}`
     : edited
       ? 'border-amber-400 dark:border-amber-500 text-gray-900 dark:text-gray-100'
       : 'border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100'
@@ -643,6 +718,9 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
     () => generatedCache.get(course.courseId) ?? new Set(),
   )
   const [sampleError, setSampleError] = useState<string | null>(null)
+  const [goalGrade, setGoalGrade] = useState<GoalLabel>(
+    () => goalCache.get(course.courseId) ?? 'A',
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -677,6 +755,9 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
     return breakdown.groups.reduce((sum, g) => sum + g.weight, 0)
   }, [breakdown])
 
+  const goal = GOAL_GRADES.find((g) => g.label === goalGrade) ?? GOAL_GRADES[0]
+  const accent = goalAccent(goal.cutoff)
+
   const projected = breakdown ? projectedTotal(breakdown, overrides) : null
   const original = course.currentScore
   const delta = projected !== null && original !== null ? projected - original : null
@@ -703,6 +784,14 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
     })
   }
 
+  function setGoal(label: GoalLabel) {
+    setGoalGrade(label)
+    goalCache.set(course.courseId, label)
+    // The old sample (if any) was aimed at a different cutoff — clear the stale
+    // error; the generated numbers stay and just recolor to the new goal.
+    setSampleError(null)
+  }
+
   function resetOverrides() {
     setOverrides({})
     overridesCache.delete(course.courseId)
@@ -722,11 +811,11 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
       const id = Number(idStr)
       if (!generatedIds.has(id)) locked[id] = value
     }
-    const result = generateSampleScores(breakdown, A_CUTOFF, locked)
+    const result = generateSampleScores(breakdown, goal.cutoff, locked)
     if (!result.ok) {
       setSampleError(
         result.reason === 'impossible'
-          ? `Can't reach ${A_CUTOFF}% — even full marks on everything open isn't enough.`
+          ? `Can't reach ${goal.cutoff}% (${goal.label}) — even full marks on everything open isn't enough.`
           : 'No open assignments to generate scores for.',
       )
       return
@@ -764,13 +853,34 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
           </p>
         </div>
         <div className="flex items-end gap-3">
-          <button
-            type="button"
-            onClick={handleGenerateSample}
-            className="text-[11px] px-2.5 py-1.5 border border-purple-300 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors whitespace-nowrap"
-          >
-            Generate Sample
-          </button>
+          <div className="flex items-center gap-2">
+            <InfoPopover label="What does Generate Sample do?">
+              <strong className="font-medium text-gray-800 dark:text-gray-200">Generate Sample</strong>{' '}
+              fills every ungraded assignment with random whole-number scores that bring your projected
+              total to the goal grade — or just above it. Scores you typed yourself are kept; only
+              untouched assignments get filled. If even perfect scores can&apos;t reach the goal,
+              you&apos;ll see a warning instead.
+            </InfoPopover>
+            <label className="flex items-center gap-1 text-[10px] text-gray-400 dark:text-gray-500">
+              Goal
+              <select
+                value={goalGrade}
+                onChange={(e) => setGoal(e.target.value as GoalLabel)}
+                className="border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300 text-[11px] px-1 py-1 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500"
+              >
+                {GOAL_GRADES.map((g) => (
+                  <option key={g.label} value={g.label}>{g.label}</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={handleGenerateSample}
+              className={`text-[11px] px-2.5 py-1.5 border transition-colors whitespace-nowrap ${accent.btn}`}
+            >
+              Generate Sample
+            </button>
+          </div>
           <div className="text-right">
             <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">Original</p>
             <p className="text-base font-light text-gray-500 dark:text-gray-400 leading-none">
@@ -845,7 +955,7 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
                         pointsPossible={a.pointsPossible}
                         originalScore={a.score}
                         override={overrides[a.id]}
-                        generated={generatedIds.has(a.id)}
+                        generatedAccent={generatedIds.has(a.id) ? accent : null}
                         onChange={setOverride}
                       />
                     </li>
