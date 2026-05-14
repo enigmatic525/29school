@@ -2,15 +2,17 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import type {
-  AssignmentGroupSummary,
   CourseGrade,
   CourseGradeBreakdown,
   GradedSubmission,
 } from '@/lib/canvas-shared'
 import { getAssignmentType } from '@/lib/canvas-shared'
+import { projectedTotal, groupPercent, generateSampleScores } from '@/lib/grade-target'
 import { courseColor } from '@/lib/course-colors'
 
 const LS_KEY = '29-hidden-grades'
+// EastsidePrep's A cutoff — the target the "Generate Sample" button aims for.
+const A_CUTOFF = 93
 
 function gradeColor(score: number | null): string {
   if (score === null) return 'text-gray-400 dark:text-gray-500'
@@ -542,64 +544,18 @@ function UpdatesTab({ recentGrades }: { recentGrades: GradedSubmission[] }) {
 }
 
 // ─── What-If tab ─────────────────────────────────────────────────────────────
-
-// Per-group percent: sum(score) / sum(points_possible). Ungraded assignments (score === null)
-// don't contribute on either side, so adding a hypothetical score to one of them counts it in.
-// Drop rules are NOT applied — show a hint instead so users know their real grade may differ.
-function groupPercent(
-  group: AssignmentGroupSummary,
-  overrides: Record<number, number | null>,
-): { pct: number | null; counted: number } {
-  let earned = 0
-  let possible = 0
-  let counted = 0
-  for (const a of group.assignments) {
-    const override = overrides[a.id]
-    const score = override !== undefined ? override : a.score
-    if (score === null || score === undefined) continue
-    earned += score
-    possible += a.pointsPossible
-    counted += 1
-  }
-  if (possible <= 0) return { pct: null, counted: 0 }
-  return { pct: (earned / possible) * 100, counted }
-}
-
-function projectedTotal(
-  breakdown: CourseGradeBreakdown,
-  overrides: Record<number, number | null>,
-): number | null {
-  if (breakdown.useWeights) {
-    let weightedSum = 0
-    let weightUsed = 0
-    for (const g of breakdown.groups) {
-      const { pct } = groupPercent(g, overrides)
-      if (pct === null) continue
-      weightedSum += pct * g.weight
-      weightUsed += g.weight
-    }
-    if (weightUsed <= 0) return null
-    return weightedSum / weightUsed
-  }
-  let earned = 0
-  let possible = 0
-  for (const g of breakdown.groups) {
-    for (const a of g.assignments) {
-      const override = overrides[a.id]
-      const score = override !== undefined ? override : a.score
-      if (score === null || score === undefined) continue
-      earned += score
-      possible += a.pointsPossible
-    }
-  }
-  return possible > 0 ? (earned / possible) * 100 : null
-}
+// The grade math (groupPercent, projectedTotal) lives in lib/grade-target.ts so
+// the calculator and the sample generator share one source of truth.
 
 // Module-scoped caches survive component unmount, so collapsing and reopening a
 // course dropdown is free — and so are repeat opens after the eager prefetch on
 // page mount. Promises are stored (not values) so concurrent callers dedupe.
 const breakdownCache = new Map<number, Promise<CourseGradeBreakdown | null>>()
 const overridesCache = new Map<number, Record<number, number | null>>()
+// Which assignment ids in a course got their score from "Generate Sample" (vs.
+// hand-typed). Kept alongside overridesCache so reopening a course still shows
+// the purple styling.
+const generatedCache = new Map<number, Set<number>>()
 
 function prefetchBreakdown(course: CourseGrade): Promise<CourseGradeBreakdown | null> {
   const existing = breakdownCache.get(course.courseId)
@@ -635,12 +591,15 @@ function ScoreInput({
   pointsPossible,
   originalScore,
   override,
+  generated,
   onChange,
 }: {
   assignmentId: number
   pointsPossible: number
   originalScore: number | null
   override: number | null | undefined
+  // True when this value came from "Generate Sample" rather than being typed.
+  generated: boolean
   onChange: (id: number, value: number | null | undefined) => void
 }) {
   const display =
@@ -648,6 +607,12 @@ function ScoreInput({
       ? override === null ? '' : String(override)
       : originalScore !== null ? String(originalScore) : ''
   const edited = override !== undefined
+  // Purple = auto-generated, amber = hand-edited, gray = untouched.
+  const inputColor = generated
+    ? 'border-purple-400 dark:border-purple-500 text-purple-600 dark:text-purple-400'
+    : edited
+      ? 'border-amber-400 dark:border-amber-500 text-gray-900 dark:text-gray-100'
+      : 'border-gray-200 dark:border-gray-700 text-gray-900 dark:text-gray-100'
   return (
     <div className="flex items-center gap-1.5">
       <input
@@ -660,11 +625,7 @@ function ScoreInput({
           onChange(assignmentId, parsed)
         }}
         placeholder="—"
-        className={`w-14 border bg-white dark:bg-gray-900 px-2 py-1 text-xs font-light text-right text-gray-900 dark:text-gray-100 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 ${
-          edited
-            ? 'border-amber-400 dark:border-amber-500'
-            : 'border-gray-200 dark:border-gray-700'
-        }`}
+        className={`w-14 border bg-white dark:bg-gray-900 px-2 py-1 text-xs font-light text-right focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 ${inputColor}`}
       />
       <span className="text-[11px] text-gray-400 dark:text-gray-500 shrink-0">/ {pointsPossible}</span>
     </div>
@@ -678,6 +639,10 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
   const [overrides, setOverrides] = useState<Record<number, number | null>>(
     () => overridesCache.get(course.courseId) ?? {},
   )
+  const [generatedIds, setGeneratedIds] = useState<Set<number>>(
+    () => generatedCache.get(course.courseId) ?? new Set(),
+  )
+  const [sampleError, setSampleError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -727,6 +692,46 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
       else overridesCache.set(course.courseId, next)
       return next
     })
+    // Hand-editing a field means it's no longer an auto-generated value.
+    setGeneratedIds((prev) => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      if (next.size === 0) generatedCache.delete(course.courseId)
+      else generatedCache.set(course.courseId, next)
+      return next
+    })
+  }
+
+  function resetOverrides() {
+    setOverrides({})
+    overridesCache.delete(course.courseId)
+    setGeneratedIds(new Set())
+    generatedCache.delete(course.courseId)
+    setSampleError(null)
+  }
+
+  // Fill every ungraded assignment with a random score that lands the course
+  // at the A cutoff, or surface why that isn't possible.
+  function handleGenerateSample() {
+    if (!breakdown) return
+    const result = generateSampleScores(breakdown, A_CUTOFF)
+    if (!result.ok) {
+      setSampleError(
+        result.reason === 'impossible'
+          ? `Can't reach ${A_CUTOFF}% — even full marks on everything left isn't enough.`
+          : 'No ungraded assignments to generate scores for.',
+      )
+      return
+    }
+    setSampleError(null)
+    const next: Record<number, number | null> = {}
+    for (const [id, score] of result.scores) next[id] = score
+    setOverrides(next)
+    overridesCache.set(course.courseId, next)
+    const ids = new Set(result.scores.keys())
+    setGeneratedIds(ids)
+    generatedCache.set(course.courseId, ids)
   }
 
   if (loading) {
@@ -751,25 +756,35 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
             {projected !== null ? `${projected.toFixed(1)}%` : '—'}
           </p>
         </div>
-        <div className="text-right">
-          <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">Original</p>
-          <p className="text-base font-light text-gray-500 dark:text-gray-400 leading-none">
-            {original !== null ? `${original.toFixed(1)}%` : '—'}
-          </p>
-          {delta !== null && Math.abs(delta) >= 0.05 && (
-            <p className={`text-[11px] mt-1 ${delta > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-              {delta > 0 ? '+' : ''}{delta.toFixed(1)}
+        <div className="flex items-end gap-3">
+          <button
+            type="button"
+            onClick={handleGenerateSample}
+            className="text-[11px] px-2.5 py-1.5 border border-purple-300 dark:border-purple-800 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 transition-colors whitespace-nowrap"
+          >
+            Generate Sample
+          </button>
+          <div className="text-right">
+            <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-1">Original</p>
+            <p className="text-base font-light text-gray-500 dark:text-gray-400 leading-none">
+              {original !== null ? `${original.toFixed(1)}%` : '—'}
             </p>
-          )}
+            {delta !== null && Math.abs(delta) >= 0.05 && (
+              <p className={`text-[11px] mt-1 ${delta > 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {delta > 0 ? '+' : ''}{delta.toFixed(1)}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
+      {sampleError && (
+        <p className="text-[11px] text-red-600 dark:text-red-400 -mt-2">{sampleError}</p>
+      )}
+
       {edited && (
         <button
-          onClick={() => {
-            setOverrides({})
-            overridesCache.delete(course.courseId)
-          }}
+          onClick={resetOverrides}
           className="self-start text-[11px] text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
         >
           ← Reset to original scores
@@ -823,6 +838,7 @@ function GradeCalculator({ course }: { course: CourseGrade }) {
                         pointsPossible={a.pointsPossible}
                         originalScore={a.score}
                         override={overrides[a.id]}
+                        generated={generatedIds.has(a.id)}
                         onChange={setOverride}
                       />
                     </li>
