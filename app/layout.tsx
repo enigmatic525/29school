@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     template: "%s · 29.school",
   },
   description:
-    "Canvas, grades, study guides, and tools for the Eastside Prep Class of 2029.",
+    "Canvas, grades, and tools for the Eastside Prep Class of 2029.",
   applicationName: "29.school",
   authors: [{ name: "Class of 2029" }],
   keywords: [
@@ -29,7 +29,6 @@ export const metadata: Metadata = {
     "Class of 2029",
     "Canvas",
     "grades",
-    "study guides",
   ],
   formatDetection: { email: false, address: false, telephone: false },
   openGraph: {
@@ -37,13 +36,13 @@ export const metadata: Metadata = {
     siteName: "29.school",
     title: "29.school",
     description:
-      "Canvas, grades, study guides, and tools for the Eastside Prep Class of 2029.",
+      "Canvas, grades, and tools for the Eastside Prep Class of 2029.",
   },
   twitter: {
     card: "summary",
     title: "29.school",
     description:
-      "Canvas, grades, study guides, and tools for the Eastside Prep Class of 2029.",
+      "Canvas, grades, and tools for the Eastside Prep Class of 2029.",
   },
   robots: { index: true, follow: true },
 };
@@ -53,7 +52,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0b" },
   ],
 };
 

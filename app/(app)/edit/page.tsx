@@ -3,11 +3,11 @@ import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getSession } from '@/lib/session'
 import { fetchAllAssignments } from '@/lib/canvas'
-import CanvasView from '@/components/CanvasView'
+import CalendarHeatmap from '@/components/CalendarHeatmap'
 
-export const metadata: Metadata = { title: 'Canvas' }
+export const metadata: Metadata = { title: 'Edit' }
 
-export default async function CanvasPage() {
+export default async function EditPage() {
   const session = await getSession()
   if (!session.isLoggedIn) redirect('/login')
 
@@ -15,11 +15,11 @@ export default async function CanvasPage() {
     return (
       <div className="border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 p-8">
         <p className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">
-          Connect Canvas to see your assignments
+          Connect Canvas to edit your calendar
         </p>
         <p className="text-sm text-gray-500 dark:text-gray-400 leading-relaxed mb-5">
-          Link your Canvas account to see upcoming due dates, mark assignments complete,
-          and access your grade overview.
+          Link your Canvas account to drag assignments across the calendar and plan
+          your week.
         </p>
         <Link
           href="/login?from=settings"
@@ -44,5 +44,5 @@ export default async function CanvasPage() {
     )
   }
 
-  return <CanvasView assignments={assignments} />
+  return <CalendarHeatmap assignments={assignments} showBoth />
 }

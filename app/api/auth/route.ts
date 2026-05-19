@@ -14,8 +14,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Brute-force defense: 8 login attempts per IP per 15 minutes for token
-  // logins, plus a separate 12 / hour cap on guest sign-ins so a flood of
-  // guest hits can't burn other shared limits (feedback, study guides).
+  // logins, plus a separate 12 / hour cap on guest sign-ins.
   // In dev there is no reverse proxy, so all requests share the same 'unknown'
   // bucket and would trip the limit during normal testing.
   const ip = getClientIp(request)

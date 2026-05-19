@@ -254,19 +254,6 @@ export async function requireAuth(): Promise<{ ok: true; token: string } | { ok:
   return { ok: true, token: session.canvasToken }
 }
 
-// Permissive: any logged-in session, including guest (no Canvas token).
-// Use for features that work without Canvas (feedback, study guides).
-export async function requireSession(): Promise<
-  | { ok: true; token: string | null; guest: boolean }
-  | { ok: false; res: NextResponse }
-> {
-  const session = await getSession()
-  if (!session.isLoggedIn) {
-    return { ok: false, res: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
-  }
-  return { ok: true, token: session.canvasToken ?? null, guest: !!session.guest }
-}
-
 // ---------- Client IP extraction (best-effort, used for rate limiting only) ----------
 
 export function getClientIp(request: NextRequest): string {

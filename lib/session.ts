@@ -6,8 +6,7 @@ export interface SessionData {
   canvasToken?: string
   isLoggedIn?: boolean
   // True when the user opted into "use without token" mode. They have a
-  // session but no Canvas access — they can use feedback, study guides,
-  // and the notice board, but the workload dashboard is unavailable.
+  // session but no Canvas access, so the workload dashboard is unavailable.
   guest?: boolean
   // Stable Canvas user id captured at login. Needed so the notification
   // settings can key prefs by a stable identifier (the token rotates).

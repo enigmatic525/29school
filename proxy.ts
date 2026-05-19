@@ -14,7 +14,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   'X-Permitted-Cross-Domain-Policies': 'none',
 }
 
-const PRIVATE_PATH_PREFIXES = ['/dashboard', '/feedback', '/study-guides', '/notice-board', '/api']
+const PRIVATE_PATH_PREFIXES = ['/dashboard', '/edit', '/api']
 
 export function proxy(request: NextRequest) {
   const response = NextResponse.next()

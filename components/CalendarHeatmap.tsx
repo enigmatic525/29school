@@ -606,16 +606,16 @@ export default function CalendarHeatmap({ assignments, showBoth = false }: Props
                 return (
                   <g key={tick}>
                     <line x1={L} y1={y} x2={R} y2={y}
-                      stroke={tick === 0 ? '#d1d5db' : '#f3f4f6'}
+                      stroke={tick === 0 ? '#d4d4d4' : '#f5f5f5'}
                       strokeWidth={tick === 0 ? 1 : 0.75}
                     />
-                    <text x={L - 8} y={y + 4} textAnchor="end" fontSize={20} fill="#9ca3af" fontFamily="inherit">
+                    <text x={L - 8} y={y + 4} textAnchor="end" fontSize={20} fill="#a3a3a3" fontFamily="inherit">
                       {tick}
                     </text>
                   </g>
                 )
               })}
-              <line x1={L} y1={T} x2={L} y2={B} stroke="#e5e7eb" strokeWidth={0.75} />
+              <line x1={L} y1={T} x2={L} y2={B} stroke="#e5e5e5" strokeWidth={0.75} />
               {dailyData.map(({ score, date, isToday }, i) => {
                 const barH = score > 0 ? Math.max(2, (score / maxDailyScore) * PH) : 0
                 const cx = L + (i + 0.5) * SLOT
@@ -637,15 +637,15 @@ export default function CalendarHeatmap({ assignments, showBoth = false }: Props
                     <rect x={L + i * SLOT} y={T} width={SLOT} height={PH + 10} fill="transparent" />
                     {barH > 0 && (
                       <rect x={bx} y={by} width={BAR_W} height={barH} rx={2} ry={2}
-                        fill={isHovered ? '#374151' : isToday ? '#6b7280' : '#9ca3af'}
+                        fill={isHovered ? '#404040' : isToday ? '#737373' : '#a3a3a3'}
                         style={{ transition: 'fill 120ms ease' }}
                       />
                     )}
                     {showLabel && (
                       <>
-                        <line x1={cx} y1={B} x2={cx} y2={B + 6} stroke="#d1d5db" strokeWidth={0.75} />
+                        <line x1={cx} y1={B} x2={cx} y2={B + 6} stroke="#d4d4d4" strokeWidth={0.75} />
                         <text x={cx} y={B + 28} textAnchor="middle" fontSize={18}
-                          fill={isToday ? '#6b7280' : '#9ca3af'} fontFamily="inherit">
+                          fill={isToday ? '#737373' : '#a3a3a3'} fontFamily="inherit">
                           {label}
                         </text>
                       </>
