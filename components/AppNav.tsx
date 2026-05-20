@@ -8,7 +8,7 @@ import ThemeToggle from './ThemeToggle'
 const TABS = [
   { label: 'Dashboard', href: '/dashboard', match: ['/dashboard'] },
   { label: 'Grades', href: '/grades', match: ['/grades'] },
-  { label: 'Edit', href: '/edit', match: ['/edit'] },
+  { label: 'Reschedule', href: '/edit', match: ['/edit'] },
 ]
 
 export default function AppNav({ name, isGuest = false }: { name: string; isGuest?: boolean }) {

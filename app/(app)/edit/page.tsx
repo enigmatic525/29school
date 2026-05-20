@@ -5,7 +5,7 @@ import { getSession } from '@/lib/session'
 import { fetchAllAssignments } from '@/lib/canvas'
 import CalendarHeatmap from '@/components/CalendarHeatmap'
 
-export const metadata: Metadata = { title: 'Edit' }
+export const metadata: Metadata = { title: 'Reschedule' }
 
 export default async function EditPage() {
   const session = await getSession()

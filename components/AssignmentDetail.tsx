@@ -7,6 +7,7 @@ import type {
   SubmissionComment,
   RubricCriterionResult,
 } from '@/lib/canvas-shared'
+import { hasNoSubmission } from '@/lib/canvas-shared'
 
 const SUBMITTABLE = ['online_upload', 'online_text_entry', 'online_url'] as const
 type SubmittableType = typeof SUBMITTABLE[number]
@@ -75,6 +76,77 @@ function CommentList({ comments }: { comments: SubmissionComment[] }) {
   )
 }
 
+// Comment thread for one assignment: existing teacher/student comments plus a
+// composer that posts the student's own comment back to Canvas.
+function CommentsSection({
+  courseId,
+  assignmentId,
+  comments,
+  onPosted,
+}: {
+  courseId: number
+  assignmentId: number
+  comments: SubmissionComment[]
+  onPosted: () => void
+}) {
+  const [text, setText] = useState('')
+  const [posting, setPosting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function post() {
+    const trimmed = text.trim()
+    if (!trimmed || posting) return
+    setPosting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/comment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ courseId, assignmentId, text: trimmed }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || `Couldn’t post comment (${res.status})`)
+      }
+      setText('')
+      // Reload so the new comment appears in the thread above.
+      onPosted()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  return (
+    <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
+      <SectionLabel>Comments</SectionLabel>
+      {comments.length > 0 ? (
+        <CommentList comments={comments} />
+      ) : (
+        <p className="text-sm text-gray-400 dark:text-gray-500 italic">No comments yet.</p>
+      )}
+      <div className="mt-3 flex flex-col gap-2">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="Add a comment…"
+          rows={2}
+          className="w-full border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-2.5 text-sm font-light text-gray-900 dark:text-gray-100 placeholder-gray-300 dark:placeholder-gray-600 focus:outline-none focus:border-gray-500 dark:focus:border-gray-500 resize-none"
+        />
+        {error && <p className="text-xs text-red-500">{error}</p>}
+        <button
+          onClick={post}
+          disabled={posting || text.trim() === ''}
+          className="self-end bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs font-light px-4 py-2 hover:bg-gray-700 dark:hover:bg-gray-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {posting ? 'Posting…' : 'Comment'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function RubricList({ rubric }: { rubric: RubricCriterionResult[] }) {
   return (
     <ul className="flex flex-col gap-1.5">
@@ -127,6 +199,9 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
 
   const fmtDate = (d: Date) =>
     d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+
+  // A no-submission assignment can never be "missing" — there's nothing to miss.
+  const showMissing = !!assignment.isMissing && !hasNoSubmission(assignment)
 
   const submittable = assignment.submission_types.filter((t): t is SubmittableType =>
     (SUBMITTABLE as readonly string[]).includes(t)
@@ -273,19 +348,19 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
         </div>
 
         {/* Submission status banner */}
-        {(assignment.submittedAt || assignment.isLate || assignment.isMissing) && (
+        {(assignment.submittedAt || assignment.isLate || showMissing) && (
           <div className={`px-5 py-2 border-b text-xs flex items-center gap-2 shrink-0 ${
-            assignment.isMissing || (assignment.isLate && !assignment.submittedAt)
+            showMissing || (assignment.isLate && !assignment.submittedAt)
               ? 'bg-red-50 dark:bg-red-950/30 border-red-100 dark:border-red-900/60 text-red-700 dark:text-red-300'
               : 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-100 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'
           }`}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              {assignment.isMissing || (assignment.isLate && !assignment.submittedAt)
+              {showMissing || (assignment.isLate && !assignment.submittedAt)
                 ? <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>
                 : <polyline points="20 6 9 17 4 12" />}
             </svg>
             <span>
-              {assignment.isMissing
+              {showMissing
                 ? 'Missing — not yet submitted'
                 : assignment.submittedAt
                 ? `${assignment.submissionState === 'graded' ? 'Graded' : 'Submitted'}${assignment.isLate ? ' (late)' : ''} · ${new Date(assignment.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
@@ -383,12 +458,14 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
             </div>
           )}
 
-          {/* Feedback — teacher comments on the submission */}
-          {detailStatus === 'loaded' && detail && detail.comments.length > 0 && (
-            <div className="px-5 py-4 border-b border-gray-100 dark:border-gray-800">
-              <SectionLabel>Feedback</SectionLabel>
-              <CommentList comments={detail.comments} />
-            </div>
+          {/* Comments — teacher feedback plus the student's own replies */}
+          {detailStatus === 'loaded' && detail && (
+            <CommentsSection
+              courseId={assignment.course_id}
+              assignmentId={assignment.id}
+              comments={detail.comments}
+              onPosted={loadDetail}
+            />
           )}
 
           {/* Rubric — always shown when the assignment defines one */}

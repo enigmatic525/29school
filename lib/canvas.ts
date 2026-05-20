@@ -122,6 +122,27 @@ export async function submitTextOrUrl(
   return res.json()
 }
 
+// Post a comment from the student onto their own submission. Canvas threads
+// it into the same submission_comments list that teacher feedback uses, so it
+// shows up alongside feedback on the next detail fetch.
+export async function postSubmissionComment(
+  token: string,
+  courseId: number,
+  assignmentId: number,
+  text: string,
+) {
+  const res = await fetch(
+    `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/self`,
+    {
+      method: 'PUT',
+      headers: { ...headers(token), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment: { text_comment: text } }),
+    }
+  )
+  if (!res.ok) throw new Error(`Canvas comment failed: ${res.status}`)
+  return res.json()
+}
+
 export async function submitFileAssignment(
   token: string,
   courseId: number,

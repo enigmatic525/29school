@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import type { CanvasAssignment } from '@/lib/canvas-shared'
-import { getAssignmentType } from '@/lib/canvas-shared'
+import type { CanvasAssignment, GradedSubmission } from '@/lib/canvas-shared'
+import { getAssignmentType, hasNoSubmission } from '@/lib/canvas-shared'
 import type { CustomTask } from '@/lib/custom-tasks'
 import { loadCustomTasks, saveCustomTasks } from '@/lib/custom-tasks'
 import { courseColor } from '@/lib/course-colors'
@@ -70,8 +70,13 @@ function AssignmentRow({
   const due = new Date(assignment.due_at!)
   const dueTime = due.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
   const submitted = isAssignmentSubmitted(assignment)
-  const done = isCompleted || submitted
-  const overdue = isPast && !submitted
+  // Assignments with nothing to turn in auto-complete once their day passes.
+  const noSubmission = hasNoSubmission(assignment)
+  const autoDone = noSubmission && isPast
+  const done = isCompleted || submitted || autoDone
+  // A no-submission assignment can never be "missing" — there's nothing to miss.
+  const showMissing = !!assignment.isMissing && !noSubmission
+  const overdue = isPast && !submitted && !autoDone
   const color = courseColor(assignment.courseCode)
 
   return (
@@ -118,7 +123,7 @@ function AssignmentRow({
             Late
           </span>
         )}
-        {assignment.isMissing && (
+        {showMissing && (
           <span className="shrink-0 px-1.5 py-0.5 text-[10px] rounded-sm leading-none bg-red-100 text-red-700 border border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/60">
             Missing
           </span>
@@ -223,7 +228,13 @@ function TaskRow({
 
 // ─── Dashboard view (upcoming) ────────────────────────────────────────────────
 
-export default function CanvasView({ assignments }: { assignments: CanvasAssignment[] }) {
+export default function CanvasView({
+  assignments,
+  recentGrades = [],
+}: {
+  assignments: CanvasAssignment[]
+  recentGrades?: GradedSubmission[]
+}) {
   const router = useRouter()
   const onSwitchToEdit = () => router.push('/edit')
   const [completedIds, setCompletedIds] = useState<Set<number>>(new Set())
@@ -349,6 +360,7 @@ export default function CanvasView({ assignments }: { assignments: CanvasAssignm
     sunday.setDate(monday.getDate() + 6)
     const startStr = toDateStr(monday)
     const endStr = toDateStr(sunday)
+    const todayStr = toDateStr(now)
 
     const byCourse = new Map<string, { count: number; done: number }>()
     let total = 0
@@ -358,7 +370,10 @@ export default function CanvasView({ assignments }: { assignments: CanvasAssignm
       const ds = toDateStr(effectiveDate(a))
       if (ds < startStr || ds > endStr) continue
       const code = a.courseCode || 'Other'
-      const isDone = completedIds.has(a.id) || isAssignmentSubmitted(a)
+      const isDone =
+        completedIds.has(a.id) ||
+        isAssignmentSubmitted(a) ||
+        (hasNoSubmission(a) && ds < todayStr)
       const e = byCourse.get(code) ?? { count: 0, done: 0 }
       e.count++
       if (isDone) e.done++
@@ -459,7 +474,7 @@ export default function CanvasView({ assignments }: { assignments: CanvasAssignm
 
   return (
     <>
-      <WeeklyTrackerSidebar weekStats={weekStats} />
+      <WeeklyTrackerSidebar weekStats={weekStats} recentGrades={recentGrades} />
 
       {groups.length === 0 ? (
         <div className="border border-dashed border-gray-200 dark:border-gray-800 py-16 text-center">

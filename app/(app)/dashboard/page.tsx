@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import { getSession } from '@/lib/session'
-import { fetchAllAssignments } from '@/lib/canvas'
+import { fetchAllAssignments, fetchRecentSubmissions } from '@/lib/canvas'
 import CanvasView from '@/components/CanvasView'
 
 export const metadata: Metadata = { title: 'Dashboard' }
@@ -31,7 +31,10 @@ export default async function DashboardPage() {
     )
   }
 
-  const { assignments } = await fetchAllAssignments(session.canvasToken)
+  const { assignments, courses } = await fetchAllAssignments(session.canvasToken)
+  // Recently graded work powers the notification feed in the weekly tracker
+  // pop-out; reuses the course list fetchAllAssignments already loaded.
+  const recentGrades = await fetchRecentSubmissions(session.canvasToken, courses)
 
   if (assignments.length === 0) {
     return (
@@ -44,5 +47,5 @@ export default async function DashboardPage() {
     )
   }
 
-  return <CanvasView assignments={assignments} />
+  return <CanvasView assignments={assignments} recentGrades={recentGrades} />
 }

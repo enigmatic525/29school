@@ -25,6 +25,15 @@ export interface CanvasAssignment {
   score?: number | null
 }
 
+// An assignment that accepts no submission at all — Canvas's 'none'/'not_graded'
+// types, or no submission types listed. There is nothing for the student to
+// turn in, so it should never be flagged "missing" and instead auto-completes
+// once its due date has passed.
+export function hasNoSubmission(a: Pick<CanvasAssignment, 'submission_types'>): boolean {
+  const types = a.submission_types ?? []
+  return types.length === 0 || types.every((t) => t === 'none' || t === 'not_graded')
+}
+
 export type AssignmentType = 'ma' | 'qa' | 'hw' | 'cw' | 'other'
 
 export function getAssignmentType(name: string): AssignmentType {
