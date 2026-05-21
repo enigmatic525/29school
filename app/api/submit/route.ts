@@ -12,7 +12,9 @@ import {
 } from '@/lib/security'
 
 const MAX_TEXT = 100_000
-const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB — Canvas accepts more, but cap our buffer to bound memory
+const MAX_FILE_BYTES = 25 * 1024 * 1024 // 25 MB per file — Canvas accepts more, but cap our buffer to bound memory
+const MAX_TOTAL_BYTES = 100 * 1024 * 1024 // 100 MB across every file in one submission
+const MAX_FILES = 20
 
 export async function POST(req: NextRequest) {
   // CSRF: only allow same-origin POSTs. Auth cookie is sameSite=lax which
@@ -37,10 +39,10 @@ export async function POST(req: NextRequest) {
   const contentType = (req.headers.get('content-type') ?? '').toLowerCase().split(';')[0]!.trim()
 
   if (contentType === 'multipart/form-data') {
-    // File branch
+    // File branch — one or more files under the repeated `file` field.
     const declared = Number(req.headers.get('content-length') ?? '0')
-    if (Number.isFinite(declared) && declared > MAX_FILE_BYTES + 64 * 1024) {
-      return NextResponse.json({ error: 'File too large' }, { status: 413 })
+    if (Number.isFinite(declared) && declared > MAX_TOTAL_BYTES + 64 * 1024) {
+      return NextResponse.json({ error: 'Files too large' }, { status: 413 })
     }
 
     let formData: FormData
@@ -52,23 +54,36 @@ export async function POST(req: NextRequest) {
 
     const courseId = asPositiveInt(formData.get('courseId'))
     const assignmentId = asPositiveInt(formData.get('assignmentId'))
-    const file = formData.get('file')
+    const files = formData.getAll('file').filter((f): f is File => f instanceof File)
 
-    if (!courseId || !assignmentId || !(file instanceof File)) {
+    if (!courseId || !assignmentId || files.length === 0) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-    if (file.size <= 0 || file.size > MAX_FILE_BYTES) {
-      return NextResponse.json({ error: 'File too large' }, { status: 413 })
+    if (files.length > MAX_FILES) {
+      return NextResponse.json({ error: `Too many files (max ${MAX_FILES})` }, { status: 400 })
+    }
+    // Bound each file and the combined payload so a submission can't blow our
+    // request memory.
+    let totalSize = 0
+    for (const file of files) {
+      if (file.size <= 0 || file.size > MAX_FILE_BYTES) {
+        return NextResponse.json({ error: 'File too large' }, { status: 413 })
+      }
+      totalSize += file.size
+    }
+    if (totalSize > MAX_TOTAL_BYTES) {
+      return NextResponse.json({ error: 'Files too large' }, { status: 413 })
     }
 
-    const safeName = asTrimmedString(file.name, 255) ?? 'upload'
-    const buffer = await file.arrayBuffer()
-    const result = await submitFileAssignment(token, courseId, assignmentId, {
-      name: safeName,
-      size: file.size,
-      type: file.type || 'application/octet-stream',
-      buffer,
-    })
+    const prepared = await Promise.all(
+      files.map(async (file) => ({
+        name: asTrimmedString(file.name, 255) ?? 'upload',
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        buffer: await file.arrayBuffer(),
+      }))
+    )
+    const result = await submitFileAssignment(token, courseId, assignmentId, prepared)
     return NextResponse.json(result)
   }
 

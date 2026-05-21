@@ -143,12 +143,17 @@ export async function postSubmissionComment(
   return res.json()
 }
 
-export async function submitFileAssignment(
+type UploadFile = { name: string; size: number; type: string; buffer: ArrayBuffer }
+
+// Register one file with Canvas, push its bytes to the returned storage URL,
+// and resolve the Canvas file id. Steps 1–2 of the upload dance; the caller
+// collects ids across files and runs the single submit (step 3).
+async function uploadSubmissionFile(
   token: string,
   courseId: number,
   assignmentId: number,
-  file: { name: string; size: number; type: string; buffer: ArrayBuffer }
-) {
+  file: UploadFile,
+): Promise<number> {
   // Step 1: Tell Canvas about the file to get an upload URL
   const initRes = await fetch(
     `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions/self/files`,
@@ -175,28 +180,41 @@ export async function submitFileAssignment(
 
   const uploadRes = await fetch(upload_url, { method: 'POST', body: fd, redirect: 'manual' })
 
-  let fileId: number
   if (uploadRes.status >= 300 && uploadRes.status < 400) {
     // S3 redirects back to Canvas to confirm — follow with auth header
     const location = uploadRes.headers.get('location')
     if (!location) throw new Error('Upload redirect missing Location header')
     const confirmRes = await fetch(location, { headers: headers(token) })
     if (!confirmRes.ok) throw new Error(`File confirm failed: ${confirmRes.status}`)
-    fileId = (await confirmRes.json()).id
-  } else if (uploadRes.ok) {
-    fileId = (await uploadRes.json()).id
-  } else {
-    throw new Error(`File upload failed: ${uploadRes.status}`)
+    return (await confirmRes.json()).id
   }
+  if (uploadRes.ok) {
+    return (await uploadRes.json()).id
+  }
+  throw new Error(`File upload failed: ${uploadRes.status}`)
+}
 
-  // Step 3: Submit the assignment with the uploaded file ID
+export async function submitFileAssignment(
+  token: string,
+  courseId: number,
+  assignmentId: number,
+  files: UploadFile[]
+) {
+  if (files.length === 0) throw new Error('No files to submit')
+
+  // Upload every file first, collecting their Canvas ids.
+  const fileIds = await Promise.all(
+    files.map((file) => uploadSubmissionFile(token, courseId, assignmentId, file))
+  )
+
+  // Step 3: Submit the assignment once with every uploaded file id.
   const submitRes = await fetch(
     `https://${DOMAIN}/api/v1/courses/${courseId}/assignments/${assignmentId}/submissions`,
     {
       method: 'POST',
       headers: { ...headers(token), 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        submission: { submission_type: 'online_upload', file_ids: [fileId] },
+        submission: { submission_type: 'online_upload', file_ids: fileIds },
       }),
     }
   )

@@ -211,7 +211,7 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
   const [type, setType] = useState<SubmittableType>(submittable[0])
   const [text, setText] = useState('')
   const [url, setUrl] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -256,11 +256,11 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
     try {
       let res: Response
       if (type === 'online_upload') {
-        if (!file) { setError('Choose a file first'); setLoading(false); return }
+        if (files.length === 0) { setError('Choose at least one file'); setLoading(false); return }
         const fd = new FormData()
         fd.append('courseId', String(assignment.course_id))
         fd.append('assignmentId', String(assignment.id))
-        fd.append('file', file)
+        for (const f of files) fd.append('file', f)
         res = await fetch('/api/submit', { method: 'POST', body: fd })
       } else {
         res = await fetch('/api/submit', {
@@ -537,22 +537,69 @@ export default function AssignmentDetail({ assignment, plannedDate, onMove, onCl
                 )}
 
                 {type === 'online_upload' && (
-                  <>
+                  <div className="flex flex-col gap-2">
                     <input
                       ref={fileInput}
                       type="file"
+                      multiple
                       className="hidden"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+                      onChange={(e) => {
+                        const picked = Array.from(e.target.files ?? [])
+                        if (picked.length) {
+                          // Append rather than replace, and skip duplicates, so
+                          // picking files in several rounds builds one list.
+                          setFiles((prev) => {
+                            const merged = [...prev]
+                            for (const f of picked) {
+                              if (!merged.some((m) => m.name === f.name && m.size === f.size)) {
+                                merged.push(f)
+                              }
+                            }
+                            return merged
+                          })
+                        }
+                        // Reset so re-picking the same file still fires onChange.
+                        e.target.value = ''
+                      }}
                     />
+                    {files.length > 0 && (
+                      <ul className="flex flex-col gap-1.5">
+                        {files.map((f, i) => (
+                          <li
+                            key={`${f.name}-${f.size}-${i}`}
+                            className="flex items-center gap-2.5 border border-gray-200 dark:border-gray-800 px-3 py-2"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden className="shrink-0 text-gray-400 dark:text-gray-500">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                            </svg>
+                            <span className="flex-1 min-w-0 truncate text-sm font-light text-gray-700 dark:text-gray-300">
+                              {f.name}
+                            </span>
+                            {fmtBytes(f.size) && (
+                              <span className="shrink-0 text-[10px] text-gray-400 dark:text-gray-500">{fmtBytes(f.size)}</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                              aria-label={`Remove ${f.name}`}
+                              className="shrink-0 text-gray-300 hover:text-red-500 dark:text-gray-600 dark:hover:text-red-400 transition-colors"
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                              </svg>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                     <button
                       onClick={() => fileInput.current?.click()}
-                      className="w-full border border-dashed border-gray-300 dark:border-gray-700 py-6 text-sm font-light text-center transition-colors hover:border-gray-500 dark:hover:border-gray-500"
+                      className="w-full border border-dashed border-gray-300 dark:border-gray-700 py-4 text-sm font-light text-center text-gray-400 dark:text-gray-500 transition-colors hover:border-gray-500 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
                     >
-                      <span className={file ? 'text-gray-900 dark:text-gray-100' : 'text-gray-400 dark:text-gray-500'}>
-                        {file ? file.name : 'Click to choose a file'}
-                      </span>
+                      {files.length > 0 ? 'Add another file' : 'Click to choose files'}
                     </button>
-                  </>
+                  </div>
                 )}
 
                 {error && <p className="text-xs text-red-500">{error}</p>}
